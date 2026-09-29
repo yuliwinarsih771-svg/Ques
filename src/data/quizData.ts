@@ -5,6 +5,7 @@ export const DEFAULT_QUIZ_SETTINGS: QuizSettings = {
   timeLimitMinutes: 20,
   isQuizOpen: true,
   allowedClasses: ['7A', '7B', '7C', '7D', '7E', '7F', '7G', '7H'],
+  activeClass: 'Semua Kelas',
   shuffleQuestions: true,
   shuffleOptions: true,
   enableAntiCheating: true,

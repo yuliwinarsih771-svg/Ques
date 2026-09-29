@@ -44,6 +44,7 @@ export interface QuizSettings {
   timeLimitMinutes: number; // 0 for unlimited, or 15, 20, 30, etc.
   isQuizOpen: boolean;
   allowedClasses: string[];
+  activeClass?: string; // 'Semua Kelas' or specific class like '7A'
   shuffleQuestions: boolean;
   shuffleOptions: boolean;
   enableAntiCheating: boolean;

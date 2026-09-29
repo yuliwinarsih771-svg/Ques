@@ -19,10 +19,26 @@ export const StartScreen: React.FC<StartScreenProps> = ({
   onOpenStudyModal,
   isStudyLocked,
 }) => {
+  const defaultClass = React.useMemo(() => {
+    if (settings.activeClass && settings.activeClass !== 'Semua Kelas') {
+      return settings.activeClass;
+    }
+    return '7A';
+  }, [settings.activeClass]);
+
   const [name, setName] = useState('');
-  const [selectedClass, setSelectedClass] = useState('7A');
+  const [selectedClass, setSelectedClass] = useState<string>(defaultClass);
   const [attendanceNumber, setAttendanceNumber] = useState<number | ''>('');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  // Sync selectedClass if teacher changed activeClass
+  React.useEffect(() => {
+    if (settings.activeClass && settings.activeClass !== 'Semua Kelas') {
+      setSelectedClass(settings.activeClass);
+      setName('');
+      setAttendanceNumber('');
+    }
+  }, [settings.activeClass]);
 
   // Check if student name already exists in a different class
   const checkCrossClassViolation = (inputName: string, chosenClass: string): { hasViolation: boolean; registeredClass?: string } => {
@@ -98,7 +114,16 @@ export const StartScreen: React.FC<StartScreenProps> = ({
     });
   };
 
+  // Available classes: if teacher designated a specific activeClass, only show that class
+  const availableClasses = React.useMemo(() => {
+    if (settings.activeClass && settings.activeClass !== 'Semua Kelas') {
+      return [settings.activeClass];
+    }
+    return ['7A', '7B', '7C', '7D', '7E', '7F', '7G', '7H'];
+  }, [settings.activeClass]);
+
   // Quick select student from master database
+  // If teacher selected a specific class, only students from that class will appear
   const classMasterList = studentsMaster
     .filter(s => s.className === selectedClass)
     .sort((a, b) => a.attendanceNumber - b.attendanceNumber);
@@ -162,18 +187,32 @@ export const StartScreen: React.FC<StartScreenProps> = ({
 
           {/* Kelas Dropdown */}
           <div>
-            <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
-              Pilih Rombel / Kelas
-            </label>
+            <div className="flex items-center justify-between mb-1.5">
+              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
+                Pilih Rombel / Kelas
+              </label>
+              {settings.activeClass && settings.activeClass !== 'Semua Kelas' && (
+                <span className="text-[11px] font-bold text-indigo-700 bg-indigo-50 border border-indigo-200/80 px-2 py-0.5 rounded-md">
+                  ★ Ditugaskan Guru: Kelas {settings.activeClass}
+                </span>
+              )}
+            </div>
             <select
               value={selectedClass}
               onChange={(e) => {
                 setSelectedClass(e.target.value);
+                setName('');
+                setAttendanceNumber('');
                 setErrorMessage(null);
               }}
-              className="w-full px-4 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-slate-800 font-bold focus:ring-2 focus:ring-indigo-500 focus:bg-white focus:outline-none transition-all"
+              disabled={Boolean(settings.activeClass && settings.activeClass !== 'Semua Kelas')}
+              className={`w-full px-4 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-slate-800 font-bold focus:ring-2 focus:ring-indigo-500 focus:bg-white focus:outline-none transition-all ${
+                settings.activeClass && settings.activeClass !== 'Semua Kelas'
+                  ? 'bg-indigo-50/40 text-indigo-900 border-indigo-200 cursor-not-allowed'
+                  : ''
+              }`}
             >
-              {['7A', '7B', '7C', '7D', '7E', '7F', '7G', '7H'].map((cls) => (
+              {availableClasses.map((cls) => (
                 <option key={cls} value={cls}>
                   Kelas {cls}
                 </option>
@@ -188,6 +227,7 @@ export const StartScreen: React.FC<StartScreenProps> = ({
                 Pilih Cepat Nama Siswa (Dari Database Siswa Kelas {selectedClass}):
               </label>
               <select
+                value={classMasterList.find(s => s.name === name && s.attendanceNumber === attendanceNumber)?.id || ''}
                 onChange={(e) => {
                   const std = classMasterList.find(s => s.id === e.target.value);
                   if (std) {
@@ -196,10 +236,9 @@ export const StartScreen: React.FC<StartScreenProps> = ({
                     setErrorMessage(null);
                   }
                 }}
-                defaultValue=""
-                className="w-full px-3 py-2 text-xs bg-indigo-50/50 border border-indigo-200 rounded-xl text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                className="w-full px-3 py-2 text-xs bg-indigo-50/50 border border-indigo-200 rounded-xl text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 font-semibold"
               >
-                <option value="" disabled>-- Pilih nama kamu atau ketik manual di bawah --</option>
+                <option value="">-- Pilih nama kamu atau ketik manual di bawah --</option>
                 {classMasterList.map((std) => (
                   <option key={std.id} value={std.id}>
                     No. {std.attendanceNumber} - {std.name}

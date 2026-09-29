@@ -15,6 +15,13 @@ import {
   CheckCircle,
   AlertTriangle,
   Upload,
+  TrendingUp,
+  TrendingDown,
+  GraduationCap,
+  Sparkles,
+  Trophy,
+  Activity,
+  ShieldCheck,
 } from 'lucide-react';
 import {
   StudentSubmission,
@@ -26,6 +33,7 @@ import {
 } from '../types';
 import { exportRecapToExcel, printClassRecap } from '../utils/printReport';
 import { TeacherInputStudent } from './TeacherInputStudent';
+import { AiQuestionGenerator } from './AiQuestionGenerator';
 
 interface TeacherDashboardProps {
   submissions: StudentSubmission[];
@@ -56,7 +64,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
   onClearAllSubmissions,
   onClose,
 }) => {
-  const [activeTab, setActiveTab] = useState<'rekap' | 'input-siswa' | 'analisis' | 'pengaturan'>('rekap');
+  const [activeTab, setActiveTab] = useState<'rekap' | 'buat-soal-ai' | 'input-siswa' | 'analisis' | 'pengaturan'>('rekap');
   const [selectedClass, setSelectedClass] = useState<string>('Semua Kelas');
   const [searchTerm, setSearchTerm] = useState('');
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
@@ -130,44 +138,102 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
         </div>
       </div>
 
-      {/* KPI Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-        <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs">
-          <p className="text-[11px] font-bold text-slate-400 uppercase">Total Peserta</p>
-          <p className="text-2xl font-black text-slate-800 mt-1">{totalSubmissions}</p>
-          <p className="text-[10px] text-slate-400 mt-0.5">{selectedClass}</p>
+      {/* KPI Mini Bar: Total Peserta, Rata-rata Kelas, Ketuntasan KKM, Nilai Tertinggi, Nilai Terendah */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2">
+        {/* 1. Total Peserta */}
+        <div className="bg-white px-2.5 py-1.5 rounded-xl border border-slate-200/90 shadow-2xs flex items-center gap-2.5 hover:border-blue-300 transition-colors">
+          <div className="w-7 h-7 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center shrink-0">
+            <Users className="w-3.5 h-3.5" />
+          </div>
+          <div className="min-w-0 flex-1">
+            <p className="text-[9px] font-bold uppercase tracking-wider text-slate-400 truncate">Total Peserta</p>
+            <div className="flex items-baseline gap-1 mt-0.5">
+              <span className="text-sm font-extrabold text-slate-800 leading-none">{totalSubmissions}</span>
+              <span className="text-[10px] text-slate-400">siswa</span>
+              <span className="text-[9px] font-bold text-blue-700 bg-blue-50 px-1 py-0.2 rounded ml-auto">
+                {selectedClass}
+              </span>
+            </div>
+          </div>
         </div>
 
-        <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs">
-          <p className="text-[11px] font-bold text-slate-400 uppercase">Rata-rata Kelas</p>
-          <p className="text-2xl font-black text-indigo-600 mt-1">{averageScore}</p>
-          <p className="text-[10px] text-slate-400 mt-0.5">Skala 0 - 100</p>
+        {/* 2. Rata-rata Kelas */}
+        <div className="bg-white px-2.5 py-1.5 rounded-xl border border-slate-200/90 shadow-2xs flex items-center gap-2.5 hover:border-indigo-300 transition-colors">
+          <div className="w-7 h-7 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0">
+            <Activity className="w-3.5 h-3.5" />
+          </div>
+          <div className="min-w-0 flex-1">
+            <p className="text-[9px] font-bold uppercase tracking-wider text-slate-400 truncate">Rata-rata</p>
+            <div className="flex items-baseline gap-1 mt-0.5">
+              <span className="text-sm font-extrabold text-indigo-600 leading-none">{averageScore}</span>
+              <span className="text-[10px] text-slate-400">/100</span>
+              <span className={`text-[9px] font-bold px-1 py-0.2 rounded ml-auto ${
+                averageScore >= settings.kkmScore
+                  ? 'bg-emerald-50 text-emerald-700'
+                  : 'bg-amber-50 text-amber-700'
+              }`}>
+                {averageScore >= settings.kkmScore ? '≥ KKM' : '< KKM'}
+              </span>
+            </div>
+          </div>
         </div>
 
-        <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs">
-          <p className="text-[11px] font-bold text-slate-400 uppercase">Ketuntasan (KKM 75)</p>
-          <p className="text-2xl font-black text-emerald-600 mt-1">{passRate}%</p>
-          <p className="text-[10px] text-emerald-600 font-semibold mt-0.5">{passedSubmissions} Siswa Tuntas</p>
+        {/* 3. Ketuntasan KKM */}
+        <div className="bg-white px-2.5 py-1.5 rounded-xl border border-slate-200/90 shadow-2xs flex items-center gap-2.5 hover:border-emerald-300 transition-colors">
+          <div className="w-7 h-7 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0">
+            <ShieldCheck className="w-3.5 h-3.5" />
+          </div>
+          <div className="min-w-0 flex-1">
+            <p className="text-[9px] font-bold uppercase tracking-wider text-slate-400 truncate">Ketuntasan KKM</p>
+            <div className="flex items-baseline gap-1 mt-0.5">
+              <span className="text-sm font-extrabold text-emerald-600 leading-none">{passRate}%</span>
+              <span className="text-[9px] text-emerald-700 font-semibold ml-auto">({passedSubmissions}/{totalSubmissions})</span>
+            </div>
+          </div>
         </div>
 
-        <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs">
-          <p className="text-[11px] font-bold text-slate-400 uppercase">Nilai Tertinggi</p>
-          <p className="text-2xl font-black text-slate-800 mt-1">{highestScore}</p>
-          <p className="text-[10px] text-slate-400 mt-0.5">Skor Maksimal</p>
+        {/* 4. Nilai Tertinggi */}
+        <div className="bg-white px-2.5 py-1.5 rounded-xl border border-slate-200/90 shadow-2xs flex items-center gap-2.5 hover:border-amber-300 transition-colors">
+          <div className="w-7 h-7 rounded-lg bg-amber-50 text-amber-600 flex items-center justify-center shrink-0">
+            <Trophy className="w-3.5 h-3.5" />
+          </div>
+          <div className="min-w-0 flex-1">
+            <p className="text-[9px] font-bold uppercase tracking-wider text-slate-400 truncate">Nilai Tertinggi</p>
+            <div className="flex items-baseline gap-1 mt-0.5">
+              <span className="text-sm font-extrabold text-slate-800 leading-none">{highestScore}</span>
+              <span className="text-[9px] font-bold text-amber-700 bg-amber-50 px-1 py-0.2 rounded ml-auto">
+                Puncak
+              </span>
+            </div>
+          </div>
         </div>
 
-        <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs">
-          <p className="text-[11px] font-bold text-slate-400 uppercase">Nilai Terendah</p>
-          <p className="text-2xl font-black text-rose-600 mt-1">{lowestScore}</p>
-          <p className="text-[10px] text-slate-400 mt-0.5">Perlu Remedial</p>
+        {/* 5. Nilai Terendah */}
+        <div className="bg-white px-2.5 py-1.5 rounded-xl border border-slate-200/90 shadow-2xs flex items-center gap-2.5 hover:border-rose-300 transition-colors col-span-2 sm:col-span-1">
+          <div className="w-7 h-7 rounded-lg bg-rose-50 text-rose-600 flex items-center justify-center shrink-0">
+            <TrendingDown className="w-3.5 h-3.5" />
+          </div>
+          <div className="min-w-0 flex-1">
+            <p className="text-[9px] font-bold uppercase tracking-wider text-slate-400 truncate">Nilai Terendah</p>
+            <div className="flex items-baseline gap-1 mt-0.5">
+              <span className="text-sm font-extrabold text-rose-600 leading-none">{lowestScore}</span>
+              <span className={`text-[9px] font-bold px-1 py-0.2 rounded ml-auto ${
+                lowestScore < settings.kkmScore
+                  ? 'bg-rose-50 text-rose-700'
+                  : 'bg-emerald-50 text-emerald-700'
+              }`}>
+                {lowestScore < settings.kkmScore ? 'Remedial' : 'Lulus'}
+              </span>
+            </div>
+          </div>
         </div>
       </div>
 
       {/* Tabs Menu Navigation */}
-      <div className="flex border-b border-slate-200 bg-white px-4 rounded-2xl shadow-xs">
+      <div className="flex border-b border-slate-200 bg-white px-4 rounded-2xl shadow-xs overflow-x-auto">
         <button
           onClick={() => setActiveTab('rekap')}
-          className={`py-3.5 px-4 font-bold text-xs border-b-2 flex items-center gap-2 transition-all ${
+          className={`py-3.5 px-4 font-bold text-xs border-b-2 flex items-center gap-2 shrink-0 transition-all ${
             activeTab === 'rekap'
               ? 'border-indigo-600 text-indigo-600'
               : 'border-transparent text-slate-500 hover:text-slate-800'
@@ -178,8 +244,23 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
         </button>
 
         <button
+          onClick={() => setActiveTab('buat-soal-ai')}
+          className={`py-3.5 px-4 font-bold text-xs border-b-2 flex items-center gap-2 shrink-0 transition-all ${
+            activeTab === 'buat-soal-ai'
+              ? 'border-indigo-600 text-indigo-600'
+              : 'border-transparent text-slate-500 hover:text-slate-800'
+          }`}
+        >
+          <Sparkles className="w-4 h-4 text-amber-500" />
+          <span>Buat Soal dengan AI</span>
+          <span className="text-[10px] bg-gradient-to-r from-amber-500 to-indigo-600 text-white px-1.5 py-0.5 rounded-full font-black shadow-2xs">
+            Gemini
+          </span>
+        </button>
+
+        <button
           onClick={() => setActiveTab('input-siswa')}
-          className={`py-3.5 px-4 font-bold text-xs border-b-2 flex items-center gap-2 transition-all ${
+          className={`py-3.5 px-4 font-bold text-xs border-b-2 flex items-center gap-2 shrink-0 transition-all ${
             activeTab === 'input-siswa'
               ? 'border-indigo-600 text-indigo-600'
               : 'border-transparent text-slate-500 hover:text-slate-800'
@@ -191,7 +272,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
 
         <button
           onClick={() => setActiveTab('analisis')}
-          className={`py-3.5 px-4 font-bold text-xs border-b-2 flex items-center gap-2 transition-all ${
+          className={`py-3.5 px-4 font-bold text-xs border-b-2 flex items-center gap-2 shrink-0 transition-all ${
             activeTab === 'analisis'
               ? 'border-indigo-600 text-indigo-600'
               : 'border-transparent text-slate-500 hover:text-slate-800'
@@ -203,7 +284,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
 
         <button
           onClick={() => setActiveTab('pengaturan')}
-          className={`py-3.5 px-4 font-bold text-xs border-b-2 flex items-center gap-2 transition-all ${
+          className={`py-3.5 px-4 font-bold text-xs border-b-2 flex items-center gap-2 shrink-0 transition-all ${
             activeTab === 'pengaturan'
               ? 'border-indigo-600 text-indigo-600'
               : 'border-transparent text-slate-500 hover:text-slate-800'
@@ -213,6 +294,14 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
           <span>Batasan & Pengaturan Kuis</span>
         </button>
       </div>
+
+      {/* Tab Content: Buat Soal dengan AI */}
+      {activeTab === 'buat-soal-ai' && (
+        <AiQuestionGenerator
+          currentQuestions={questions}
+          onSaveQuestions={onSaveQuestions}
+        />
+      )}
 
       {/* Tab Content: Rekap Nilai Siswa */}
       {activeTab === 'rekap' && (
@@ -398,6 +487,27 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div className="space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  Target Kelas Yang Aktif / Ditugaskan:
+                </label>
+                <select
+                  value={settings.activeClass || 'Semua Kelas'}
+                  onChange={(e) => onSaveSettings({ ...settings, activeClass: e.target.value })}
+                  className="w-full px-3 py-2 bg-indigo-50/70 border border-indigo-300 rounded-xl text-xs font-bold text-indigo-900 focus:ring-2 focus:ring-indigo-500"
+                >
+                  <option value="Semua Kelas">Semua Kelas (7A s.d. 7H)</option>
+                  {['7A', '7B', '7C', '7D', '7E', '7F', '7G', '7H'].map((cls) => (
+                    <option key={cls} value={cls}>
+                      Khusus Kelas {cls} Saja
+                    </option>
+                  ))}
+                </select>
+                <p className="text-[11px] text-slate-500 mt-1">
+                  Jika guru memilih kelas tertentu (misal: 7A), maka di dashboard utama siswa hanya nama-nama siswa kelas tersebut yang akan muncul.
+                </p>
+              </div>
+
               <div>
                 <label className="block text-xs font-bold text-slate-700 mb-1">
                   Batas Pengerjaan per Siswa:
