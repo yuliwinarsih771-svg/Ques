@@ -1,0 +1,6 @@
+{
+  "name": "Kuis Interaktif Bahasa Inggris - Eli Ermawati, S.Pd.",
+  "description": "Aplikasi Kuis Interaktif Bahasa Inggris Kelas 7 SMP dengan topik Introducing Myself and Others (Descriptive Text) dan Procedure Text, dilengkapi Dashboard Guru, rekap nilai, cetak raport/sertifikat, audio listening, dan import data siswa.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
