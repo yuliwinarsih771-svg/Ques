@@ -17,6 +17,7 @@ import {
   AlertCircle,
 } from 'lucide-react';
 import { Question } from '../types';
+import { DEFAULT_QUESTIONS } from '../data/quizData';
 import { soundManager } from '../utils/audio';
 
 interface AiQuestionGeneratorProps {
@@ -84,6 +85,8 @@ export const AiQuestionGenerator: React.FC<AiQuestionGeneratorProps> = ({
   const [generatedQuestions, setGeneratedQuestions] = useState<Question[]>([]);
   const [notification, setNotification] = useState<{ type: 'success' | 'error' | 'info'; text: string } | null>(null);
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
+  const [showReplaceConfirm, setShowReplaceConfirm] = useState<boolean>(false);
+  const [showResetConfirm, setShowResetConfirm] = useState<boolean>(false);
 
   // Audio testing state
   const [playingIndex, setPlayingIndex] = useState<number | null>(null);
@@ -148,7 +151,7 @@ export const AiQuestionGenerator: React.FC<AiQuestionGeneratorProps> = ({
 
     return fallbacks.slice(0, count).map((q, idx) => ({
       ...q,
-      id: Date.now() + idx,
+      id: Date.now() + idx * 50 + Math.floor(Math.random() * 20),
       topic: topicName,
     }));
   };
@@ -162,7 +165,7 @@ export const AiQuestionGenerator: React.FC<AiQuestionGeneratorProps> = ({
 
     setIsGenerating(true);
     setNotification(null);
-    setStatusMessage('Menghubungkan ke Gemini 3.8 Flash AI...');
+    setStatusMessage('Menghubungkan ke AI Gemini...');
 
     try {
       const response = await fetch('/api/ai/generate-questions', {
@@ -182,8 +185,9 @@ export const AiQuestionGenerator: React.FC<AiQuestionGeneratorProps> = ({
       const data = await response.json();
 
       if (data.success && Array.isArray(data.questions) && data.questions.length > 0) {
+        const baseTime = Date.now();
         const formatted: Question[] = data.questions.map((q: any, i: number) => ({
-          id: Date.now() + i,
+          id: typeof q.id === 'number' ? q.id : baseTime + i * 50 + Math.floor(Math.random() * 20),
           topic: q.topic || activeTopic,
           question: q.question,
           options: Array.isArray(q.options) ? q.options : ['A', 'B', 'C', 'D'],
@@ -194,10 +198,17 @@ export const AiQuestionGenerator: React.FC<AiQuestionGeneratorProps> = ({
         }));
 
         setGeneratedQuestions(formatted);
-        setNotification({
-          type: 'success',
-          text: `Berhasil membuat ${formatted.length} butir soal dengan Gemini AI! Silakan pratinjau dan sesuaikan di bawah.`,
-        });
+        if (data.quotaNotice) {
+          setNotification({
+            type: 'info',
+            text: `${data.quotaNotice} (${formatted.length} butir soal siap digunakan).`,
+          });
+        } else {
+          setNotification({
+            type: 'success',
+            text: `Berhasil membuat ${formatted.length} butir soal dengan AI! Silakan pratinjau dan sesuaikan di bawah.`,
+          });
+        }
       } else {
         // Fallback gracefully
         console.warn('API returned fallback or error:', data.error);
@@ -205,7 +216,7 @@ export const AiQuestionGenerator: React.FC<AiQuestionGeneratorProps> = ({
         setGeneratedQuestions(fallbackList);
         setNotification({
           type: 'info',
-          text: `Berhasil membuat ${fallbackList.length} butir soal berdasarkan kurikulum (Mode Kurikulum Standar SMP). Anda dapat mengedit butir soal di bawah.`,
+          text: `Berhasil membuat ${fallbackList.length} butir soal berdasarkan kurikulum SMP (Mode Cadangan Kurikulum). Anda dapat mengedit butir soal di bawah.`,
         });
       }
     } catch (err: any) {
@@ -238,30 +249,62 @@ export const AiQuestionGenerator: React.FC<AiQuestionGeneratorProps> = ({
   };
 
   // Action: Replace all questions in the quiz with the new AI questions
-  const handleReplaceActiveQuestions = () => {
+  const executeReplaceQuestions = () => {
     if (generatedQuestions.length === 0) return;
-    if (
-      window.confirm(
-        `Gantikan ${currentQuestions.length} butir soal yang ada dengan ${generatedQuestions.length} butir soal AI baru ini?`
-      )
-    ) {
-      onSaveQuestions(generatedQuestions);
-      setNotification({
-        type: 'success',
-        text: `Kuis berhasil diperbarui! Sekarang kuis menggunakan ${generatedQuestions.length} butir soal baru hasil AI.`,
-      });
-      soundManager.playSuccessSound();
-    }
+    const sanitized = generatedQuestions.map((q, idx) => ({
+      ...q,
+      id: idx + 1,
+    }));
+    onSaveQuestions(sanitized);
+    setNotification({
+      type: 'success',
+      text: `Kuis berhasil diperbarui! Sekarang kuis menggunakan ${sanitized.length} butir soal baru hasil AI.`,
+    });
+    soundManager.playSuccessSound();
   };
 
-  // Action: Append AI questions to existing quiz bank
+  const handleReplaceActiveQuestions = () => {
+    if (generatedQuestions.length === 0) return;
+    setShowReplaceConfirm(true);
+  };
+
+  const executeResetQuestions = () => {
+    onSaveQuestions(DEFAULT_QUESTIONS);
+    setNotification({
+      type: 'success',
+      text: 'Bank soal kuis telah di-reset kembali ke 10 soal default kurikulum!',
+    });
+    soundManager.playSuccessSound();
+  };
+
+  // Action: Append AI questions to existing quiz bank with guaranteed fresh unique IDs
   const handleAppendQuestions = () => {
     if (generatedQuestions.length === 0) return;
-    const combined = [...currentQuestions, ...generatedQuestions];
+    const existingIds = new Set(currentQuestions.map(q => q.id));
+    let nextId = 1;
+    for (const q of currentQuestions) {
+      if (typeof q.id === 'number' && q.id >= nextId && q.id < 1000000) {
+        nextId = q.id + 1;
+      }
+    }
+
+    const uniqueNewQuestions = generatedQuestions.map((q) => {
+      let id = q.id;
+      if (!id || existingIds.has(id)) {
+        while (existingIds.has(nextId)) {
+          nextId++;
+        }
+        id = nextId++;
+      }
+      existingIds.add(id);
+      return { ...q, id };
+    });
+
+    const combined = [...currentQuestions, ...uniqueNewQuestions];
     onSaveQuestions(combined);
     setNotification({
       type: 'success',
-      text: `Berhasil menambahkan ${generatedQuestions.length} soal AI. Total soal kuis sekarang: ${combined.length} butir soal!`,
+      text: `Berhasil menambahkan ${uniqueNewQuestions.length} soal AI. Total soal kuis sekarang: ${combined.length} butir soal!`,
     });
     soundManager.playSuccessSound();
   };
@@ -602,7 +645,7 @@ export const AiQuestionGenerator: React.FC<AiQuestionGeneratorProps> = ({
           <div className="space-y-4">
             {generatedQuestions.map((q, idx) => (
               <div
-                key={q.id || idx}
+                key={`ai-gen-card-${q.id}-${idx}`}
                 className="bg-white border border-slate-200/90 rounded-2xl p-5 shadow-2xs hover:border-indigo-200 transition-all space-y-3.5"
               >
                 {/* Header row */}
@@ -777,17 +820,7 @@ export const AiQuestionGenerator: React.FC<AiQuestionGeneratorProps> = ({
 
           <div className="flex items-center gap-2 shrink-0">
             <button
-              onClick={() => {
-                if (window.confirm('Reset bank soal kembali ke 10 soal standar awal materi Introducing Myself & Procedure Text?')) {
-                  import('../data/quizData').then((mod) => {
-                    onSaveQuestions(mod.DEFAULT_QUESTIONS);
-                    setNotification({
-                      type: 'success',
-                      text: 'Bank soal kuis telah di-reset kembali ke 10 soal default kurikulum!',
-                    });
-                  });
-                }
-              }}
+              onClick={() => setShowResetConfirm(true)}
               className="px-3 py-1.5 bg-white border border-slate-300 text-slate-600 hover:bg-slate-100 font-semibold text-xs rounded-xl transition-all flex items-center gap-1.5"
             >
               <RotateCcw className="w-3.5 h-3.5 text-slate-400" />
@@ -796,6 +829,74 @@ export const AiQuestionGenerator: React.FC<AiQuestionGeneratorProps> = ({
           </div>
         </div>
       </div>
+
+      {/* Modal Konfirmasi Ganti Soal Utama */}
+      {showReplaceConfirm && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl p-6 max-w-sm w-full space-y-4 shadow-xl border border-slate-200">
+            <div className="w-12 h-12 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center mx-auto">
+              <Sparkles className="w-6 h-6 text-indigo-600" />
+            </div>
+            <div className="text-center space-y-1">
+              <h3 className="text-base font-extrabold text-slate-800">Terapkan Sebagai Soal Kuis Utama?</h3>
+              <p className="text-xs text-slate-500">
+                Tindakan ini akan menggantikan {currentQuestions.length} butir soal lama dengan {generatedQuestions.length} butir soal AI baru ini untuk dikerjakan siswa.
+              </p>
+            </div>
+            <div className="flex gap-2 pt-2">
+              <button
+                onClick={() => setShowReplaceConfirm(false)}
+                className="flex-1 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl transition-all"
+              >
+                Batal
+              </button>
+              <button
+                onClick={() => {
+                  setShowReplaceConfirm(false);
+                  executeReplaceQuestions();
+                }}
+                className="flex-1 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-xs transition-all"
+              >
+                Ya, Terapkan
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Konfirmasi Reset ke Soal Standar */}
+      {showResetConfirm && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl p-6 max-w-sm w-full space-y-4 shadow-xl border border-slate-200">
+            <div className="w-12 h-12 rounded-2xl bg-amber-50 text-amber-600 flex items-center justify-center mx-auto">
+              <RotateCcw className="w-6 h-6" />
+            </div>
+            <div className="text-center space-y-1">
+              <h3 className="text-base font-extrabold text-slate-800">Kembalikan ke Soal Standar?</h3>
+              <p className="text-xs text-slate-500">
+                Bank soal kuis akan di-reset kembali ke 10 soal standar awal materi Introducing Myself & Procedure Text.
+              </p>
+            </div>
+            <div className="flex gap-2 pt-2">
+              <button
+                onClick={() => setShowResetConfirm(false)}
+                className="flex-1 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl transition-all"
+              >
+                Batal
+              </button>
+              <button
+                onClick={() => {
+                  setShowResetConfirm(false);
+                  executeResetQuestions();
+                }}
+                className="flex-1 py-2.5 bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs rounded-xl shadow-xs transition-all"
+              >
+                Ya, Reset Soal
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

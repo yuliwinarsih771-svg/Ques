@@ -37,6 +37,32 @@ const STORAGE_KEYS = {
   TEACHER_PIN: 'quiz_teacher_pin_v2',
 };
 
+// Helper to ensure each question in the question bank always has a guaranteed unique ID
+const ensureUniqueQuestionIds = (qs: Question[]): Question[] => {
+  if (!Array.isArray(qs)) return DEFAULT_QUESTIONS;
+  const seenIds = new Set<number>();
+  let nextId = 1;
+
+  // Find max numeric ID that is reasonable
+  for (const q of qs) {
+    if (typeof q.id === 'number' && q.id > 0 && q.id < 1000000 && q.id >= nextId) {
+      nextId = q.id + 1;
+    }
+  }
+
+  return qs.map((q, idx) => {
+    let id = q.id;
+    if (typeof id !== 'number' || seenIds.has(id)) {
+      while (seenIds.has(nextId)) {
+        nextId++;
+      }
+      id = nextId++;
+    }
+    seenIds.add(id);
+    return { ...q, id };
+  });
+};
+
 export default function App() {
   // Screen state: 'start' | 'quiz' | 'result' | 'teacher'
   const [currentScreen, setCurrentScreen] = useState<'start' | 'quiz' | 'result' | 'teacher'>('start');
@@ -63,11 +89,17 @@ export default function App() {
   const [questions, setQuestions] = useState<Question[]>(() => {
     try {
       const saved = localStorage.getItem(STORAGE_KEYS.QUESTIONS);
-      return saved ? JSON.parse(saved) : DEFAULT_QUESTIONS;
+      const parsed = saved ? JSON.parse(saved) : DEFAULT_QUESTIONS;
+      return ensureUniqueQuestionIds(Array.isArray(parsed) ? parsed : DEFAULT_QUESTIONS);
     } catch {
       return DEFAULT_QUESTIONS;
     }
   });
+
+  const handleSaveQuestions = (newQuestions: Question[]) => {
+    const sanitized = ensureUniqueQuestionIds(newQuestions);
+    setQuestions(sanitized);
+  };
 
   const [settings, setSettings] = useState<QuizSettings>(() => {
     try {
@@ -243,17 +275,26 @@ export default function App() {
     setSubmissions([]);
   };
 
+  const isQuizActive = currentScreen === 'quiz';
+  const isDedicatedScreen = currentScreen === 'quiz' || currentScreen === 'teacher';
+
   return (
-    <div className="min-h-screen flex flex-col bg-slate-50 text-slate-800">
-      {/* Top Navbar */}
-      <Navbar
-        onOpenTeacherPin={() => setIsPinModalOpen(true)}
-        onOpenStudyModal={handleOpenStudyModal}
-        isStudyLocked={hasViewedStudy}
-      />
+    <div
+      className={`bg-slate-50 text-slate-800 flex flex-col ${
+        isQuizActive ? 'h-dvh max-h-dvh overflow-hidden' : 'min-h-screen'
+      }`}
+    >
+      {/* Top Navbar: Hide during quiz & teacher dashboard to allow authentic full-screen layout */}
+      {!isDedicatedScreen && (
+        <Navbar
+          onOpenTeacherPin={() => setIsPinModalOpen(true)}
+          onOpenStudyModal={handleOpenStudyModal}
+          isStudyLocked={hasViewedStudy}
+        />
+      )}
 
       {/* Main View Router */}
-      <main className="flex-1">
+      <main className={`flex-1 ${isQuizActive ? 'h-full min-h-0 overflow-hidden' : ''}`}>
         {currentScreen === 'start' && (
           <StartScreen
             settings={settings}
@@ -300,7 +341,7 @@ export default function App() {
             violations={violations}
             onSaveSettings={setSettings}
             onSaveMaster={setStudentsMaster}
-            onSaveQuestions={setQuestions}
+            onSaveQuestions={handleSaveQuestions}
             onDeleteSubmission={handleDeleteSubmission}
             onClearAllSubmissions={handleClearAllSubmissions}
             onClose={() => setCurrentScreen('start')}
@@ -308,8 +349,12 @@ export default function App() {
         )}
       </main>
 
-      {/* Footer */}
-      <Footer />
+      {/* Footer: Hidden during quiz & teacher dashboard, and compact on mobile for Start & Result */}
+      {!isDedicatedScreen && (
+        <div className="hidden sm:block">
+          <Footer />
+        </div>
+      )}
 
       {/* Teacher PIN Modal */}
       <TeacherPinModal

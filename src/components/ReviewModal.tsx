@@ -47,7 +47,7 @@ export const ReviewModal: React.FC<ReviewModalProps> = ({
 
             return (
               <div
-                key={q.id}
+                key={`rev-${q.id}-${idx}`}
                 className={`p-5 rounded-2xl border ${
                   isCorrect
                     ? 'border-emerald-200 bg-emerald-50/20'

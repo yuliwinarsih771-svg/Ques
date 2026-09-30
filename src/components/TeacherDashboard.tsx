@@ -22,6 +22,14 @@ import {
   Trophy,
   Activity,
   ShieldCheck,
+  LayoutDashboard,
+  ChevronLeft,
+  ChevronRight,
+  Menu,
+  X,
+  Home,
+  LogOut,
+  ChevronDown,
 } from 'lucide-react';
 import {
   StudentSubmission,
@@ -68,6 +76,11 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
   const [selectedClass, setSelectedClass] = useState<string>('Semua Kelas');
   const [searchTerm, setSearchTerm] = useState('');
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
+  const [showClearAllModal, setShowClearAllModal] = useState<boolean>(false);
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState<boolean>(false);
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState<boolean>(false);
+  const [showScreenOptions, setShowScreenOptions] = useState<boolean>(false);
+  const [showHelp, setShowHelp] = useState<boolean>(false);
 
   // Filter submissions by class and search
   const filteredSubmissions = submissions
@@ -99,209 +112,393 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
   };
 
   return (
-    <div className="max-w-7xl mx-auto py-6 px-4 sm:px-6 space-y-6">
-      {/* Top Header Card */}
-      <div className="bg-white rounded-3xl p-6 border border-slate-200 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div>
-          <div className="inline-flex items-center gap-2 px-3 py-1 bg-indigo-50 border border-indigo-200/60 rounded-full text-xs font-bold text-indigo-700 mb-2">
-            Portal Guru • Eli Ermawati, S.Pd.
+    <div className="min-h-screen bg-[#f0f0f1] text-[#2c3338] flex flex-col font-sans select-none antialiased">
+      {/* 1. TOP ADMIN BAR (WordPress Dark Bar: #1d2327) */}
+      <header className="h-8 sm:h-9 bg-[#1d2327] text-[#c3c4c7] px-3 sm:px-4 flex items-center justify-between text-xs z-30 shrink-0 border-b border-[#3c434a]">
+        {/* Left Side: Logo & Site Title */}
+        <div className="flex items-center gap-2 sm:gap-3">
+          {/* Mobile hamburger menu toggle */}
+          <button
+            onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+            className="md:hidden p-1 text-[#c3c4c7] hover:text-white"
+            title="Toggle Menu"
+          >
+            {isMobileMenuOpen ? <X className="w-4 h-4" /> : <Menu className="w-4 h-4" />}
+          </button>
+
+          {/* WP style Icon */}
+          <div className="flex items-center gap-1.5 hover:text-white transition-colors cursor-pointer">
+            <div className="w-5 h-5 rounded-full bg-white/10 flex items-center justify-center text-white font-bold text-xs">
+              W
+            </div>
           </div>
-          <h1 className="text-2xl font-black text-slate-800">Dashboard Pengajar & Rekap Nilai</h1>
-          <p className="text-xs text-slate-500 mt-0.5">
-            Materi: Chapter 1: Introducing my self and other (Descriptive Text) • Kelas VII SMP
-          </p>
+
+          <div className="hidden sm:flex items-center gap-1.5 text-white font-medium hover:text-[#72aee6] transition-colors cursor-pointer">
+            <Home className="w-3.5 h-3.5 text-[#c3c4c7]" />
+            <span className="font-bold">Portal Guru SMP</span>
+            <span className="text-[#8c8f94] text-[11px] font-normal">• English for Nusantara (Kelas VII)</span>
+          </div>
         </div>
 
-        <div className="flex items-center gap-2">
+        {/* Right Side: Quick Action & User Greeting */}
+        <div className="flex items-center gap-2 sm:gap-3 text-[11px]">
           <button
             onClick={() => exportRecapToExcel(submissions, selectedClass, settings.kkmScore)}
-            className="inline-flex items-center gap-1.5 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-xs transition-all"
+            className="hidden sm:inline-flex items-center gap-1 px-2 py-0.5 bg-[#2c3338] hover:bg-[#3c434a] text-emerald-400 font-semibold rounded text-[11px] transition-colors"
+            title="Download Excel"
           >
-            <FileSpreadsheet className="w-4 h-4" />
-            <span>Export Excel (.xls)</span>
+            <FileSpreadsheet className="w-3 h-3" />
+            <span>Export Excel</span>
           </button>
 
           <button
             onClick={() => printClassRecap(submissions, selectedClass, settings.kkmScore)}
-            className="inline-flex items-center gap-1.5 px-4 py-2 bg-slate-800 hover:bg-slate-900 text-white font-bold text-xs rounded-xl shadow-xs transition-all"
+            className="hidden sm:inline-flex items-center gap-1 px-2 py-0.5 bg-[#2c3338] hover:bg-[#3c434a] text-slate-200 font-semibold rounded text-[11px] transition-colors"
+            title="Cetak Laporan A4"
           >
-            <Printer className="w-4 h-4" />
-            <span>Cetak Laporan</span>
+            <Printer className="w-3 h-3" />
+            <span>Cetak A4</span>
           </button>
 
+          {/* User profile */}
+          <div className="flex items-center gap-1.5 text-[#c3c4c7] hover:text-white cursor-default">
+            <span>Howdy, <strong className="text-white font-semibold">Ibu Eli Ermawati, S.Pd.</strong></span>
+            <div className="w-5 h-5 rounded-full bg-[#3c434a] flex items-center justify-center text-slate-200 font-bold text-[10px]">
+              E
+            </div>
+          </div>
+
+          {/* Close button */}
           <button
             onClick={onClose}
-            className="px-4 py-2 bg-white border border-slate-300 text-slate-700 hover:bg-slate-50 font-bold text-xs rounded-xl transition-all"
+            className="ml-1 sm:ml-2 inline-flex items-center gap-1 px-2.5 py-1 bg-rose-600 hover:bg-rose-700 text-white font-bold rounded text-[11px] transition-all active:scale-95 shadow-2xs"
+            title="Keluar dari Portal Guru"
           >
-            Tutup Portal
+            <LogOut className="w-3 h-3" />
+            <span className="hidden xs:inline">Tutup Portal</span>
           </button>
         </div>
-      </div>
+      </header>
 
-      {/* KPI Mini Bar: Total Peserta, Rata-rata Kelas, Ketuntasan KKM, Nilai Tertinggi, Nilai Terendah */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2">
-        {/* 1. Total Peserta */}
-        <div className="bg-white px-2.5 py-1.5 rounded-xl border border-slate-200/90 shadow-2xs flex items-center gap-2.5 hover:border-blue-300 transition-colors">
-          <div className="w-7 h-7 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center shrink-0">
-            <Users className="w-3.5 h-3.5" />
-          </div>
-          <div className="min-w-0 flex-1">
-            <p className="text-[9px] font-bold uppercase tracking-wider text-slate-400 truncate">Total Peserta</p>
-            <div className="flex items-baseline gap-1 mt-0.5">
-              <span className="text-sm font-extrabold text-slate-800 leading-none">{totalSubmissions}</span>
-              <span className="text-[10px] text-slate-400">siswa</span>
-              <span className="text-[9px] font-bold text-blue-700 bg-blue-50 px-1 py-0.2 rounded ml-auto">
-                {selectedClass}
-              </span>
-            </div>
-          </div>
-        </div>
-
-        {/* 2. Rata-rata Kelas */}
-        <div className="bg-white px-2.5 py-1.5 rounded-xl border border-slate-200/90 shadow-2xs flex items-center gap-2.5 hover:border-indigo-300 transition-colors">
-          <div className="w-7 h-7 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0">
-            <Activity className="w-3.5 h-3.5" />
-          </div>
-          <div className="min-w-0 flex-1">
-            <p className="text-[9px] font-bold uppercase tracking-wider text-slate-400 truncate">Rata-rata</p>
-            <div className="flex items-baseline gap-1 mt-0.5">
-              <span className="text-sm font-extrabold text-indigo-600 leading-none">{averageScore}</span>
-              <span className="text-[10px] text-slate-400">/100</span>
-              <span className={`text-[9px] font-bold px-1 py-0.2 rounded ml-auto ${
-                averageScore >= settings.kkmScore
-                  ? 'bg-emerald-50 text-emerald-700'
-                  : 'bg-amber-50 text-amber-700'
-              }`}>
-                {averageScore >= settings.kkmScore ? '≥ KKM' : '< KKM'}
-              </span>
-            </div>
-          </div>
-        </div>
-
-        {/* 3. Ketuntasan KKM */}
-        <div className="bg-white px-2.5 py-1.5 rounded-xl border border-slate-200/90 shadow-2xs flex items-center gap-2.5 hover:border-emerald-300 transition-colors">
-          <div className="w-7 h-7 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0">
-            <ShieldCheck className="w-3.5 h-3.5" />
-          </div>
-          <div className="min-w-0 flex-1">
-            <p className="text-[9px] font-bold uppercase tracking-wider text-slate-400 truncate">Ketuntasan KKM</p>
-            <div className="flex items-baseline gap-1 mt-0.5">
-              <span className="text-sm font-extrabold text-emerald-600 leading-none">{passRate}%</span>
-              <span className="text-[9px] text-emerald-700 font-semibold ml-auto">({passedSubmissions}/{totalSubmissions})</span>
-            </div>
-          </div>
-        </div>
-
-        {/* 4. Nilai Tertinggi */}
-        <div className="bg-white px-2.5 py-1.5 rounded-xl border border-slate-200/90 shadow-2xs flex items-center gap-2.5 hover:border-amber-300 transition-colors">
-          <div className="w-7 h-7 rounded-lg bg-amber-50 text-amber-600 flex items-center justify-center shrink-0">
-            <Trophy className="w-3.5 h-3.5" />
-          </div>
-          <div className="min-w-0 flex-1">
-            <p className="text-[9px] font-bold uppercase tracking-wider text-slate-400 truncate">Nilai Tertinggi</p>
-            <div className="flex items-baseline gap-1 mt-0.5">
-              <span className="text-sm font-extrabold text-slate-800 leading-none">{highestScore}</span>
-              <span className="text-[9px] font-bold text-amber-700 bg-amber-50 px-1 py-0.2 rounded ml-auto">
-                Puncak
-              </span>
-            </div>
-          </div>
-        </div>
-
-        {/* 5. Nilai Terendah */}
-        <div className="bg-white px-2.5 py-1.5 rounded-xl border border-slate-200/90 shadow-2xs flex items-center gap-2.5 hover:border-rose-300 transition-colors col-span-2 sm:col-span-1">
-          <div className="w-7 h-7 rounded-lg bg-rose-50 text-rose-600 flex items-center justify-center shrink-0">
-            <TrendingDown className="w-3.5 h-3.5" />
-          </div>
-          <div className="min-w-0 flex-1">
-            <p className="text-[9px] font-bold uppercase tracking-wider text-slate-400 truncate">Nilai Terendah</p>
-            <div className="flex items-baseline gap-1 mt-0.5">
-              <span className="text-sm font-extrabold text-rose-600 leading-none">{lowestScore}</span>
-              <span className={`text-[9px] font-bold px-1 py-0.2 rounded ml-auto ${
-                lowestScore < settings.kkmScore
-                  ? 'bg-rose-50 text-rose-700'
-                  : 'bg-emerald-50 text-emerald-700'
-              }`}>
-                {lowestScore < settings.kkmScore ? 'Remedial' : 'Lulus'}
-              </span>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Tabs Menu Navigation */}
-      <div className="flex border-b border-slate-200 bg-white px-4 rounded-2xl shadow-xs overflow-x-auto">
-        <button
-          onClick={() => setActiveTab('rekap')}
-          className={`py-3.5 px-4 font-bold text-xs border-b-2 flex items-center gap-2 shrink-0 transition-all ${
-            activeTab === 'rekap'
-              ? 'border-indigo-600 text-indigo-600'
-              : 'border-transparent text-slate-500 hover:text-slate-800'
+      {/* 2. BODY LAYOUT: LEFT SIDEBAR + MAIN CONTENT */}
+      <div className="flex flex-1 min-h-[calc(100vh-36px)] relative">
+        {/* Left Sidebar Menu (Hitam / Dark WordPress Style) */}
+        <aside
+          className={`bg-[#1d2327] text-[#c3c4c7] shrink-0 transition-all duration-200 flex flex-col justify-between z-20 ${
+            isSidebarCollapsed ? 'w-12 sm:w-14' : 'w-48 sm:w-56'
+          } ${
+            isMobileMenuOpen
+              ? 'block fixed inset-y-8 left-0 shadow-2xl z-40'
+              : 'hidden md:flex'
           }`}
         >
-          <Users className="w-4 h-4" />
-          <span>Rekap Nilai Siswa</span>
-        </button>
+          {/* Menu Items List */}
+          <div className="py-1 space-y-0.5">
+            {/* 1. Dashboard / Rekap Nilai Siswa */}
+            <div>
+              <button
+                onClick={() => {
+                  setActiveTab('rekap');
+                  setIsMobileMenuOpen(false);
+                }}
+                className={`w-full px-3 py-2 text-xs flex items-center justify-start gap-2.5 transition-all text-left ${
+                  activeTab === 'rekap'
+                    ? 'bg-[#2271b1] text-white font-bold'
+                    : 'text-[#c3c4c7] hover:bg-[#13171a] hover:text-[#72aee6]'
+                }`}
+                title="Dashboard & Rekap Nilai Siswa"
+              >
+                <LayoutDashboard className="w-4 h-4 shrink-0" />
+                {!isSidebarCollapsed && (
+                  <>
+                    <span className="flex-1 truncate">Dashboard</span>
+                    {totalSubmissions > 0 && (
+                      <span className="text-[10px] bg-[#13171a] text-[#72aee6] px-1.5 py-0.2 rounded-full font-bold">
+                        {totalSubmissions}
+                      </span>
+                    )}
+                  </>
+                )}
+              </button>
 
-        <button
-          onClick={() => setActiveTab('buat-soal-ai')}
-          className={`py-3.5 px-4 font-bold text-xs border-b-2 flex items-center gap-2 shrink-0 transition-all ${
-            activeTab === 'buat-soal-ai'
-              ? 'border-indigo-600 text-indigo-600'
-              : 'border-transparent text-slate-500 hover:text-slate-800'
-          }`}
-        >
-          <Sparkles className="w-4 h-4 text-amber-500" />
-          <span>Buat Soal dengan AI</span>
-          <span className="text-[10px] bg-gradient-to-r from-amber-500 to-indigo-600 text-white px-1.5 py-0.5 rounded-full font-black shadow-2xs">
-            Gemini
-          </span>
-        </button>
+              {/* Sub-menu (WordPress style) */}
+              {!isSidebarCollapsed && activeTab === 'rekap' && (
+                <div className="bg-[#2c3338] py-1 text-[11px] text-[#c3c4c7]">
+                  <button
+                    onClick={() => setSelectedClass('Semua Kelas')}
+                    className={`w-full px-7 py-1 text-left hover:text-[#72aee6] flex items-center justify-between ${
+                      selectedClass === 'Semua Kelas' ? 'text-white font-bold' : ''
+                    }`}
+                  >
+                    <span>Semua Kelas</span>
+                    {selectedClass === 'Semua Kelas' && <span className="w-1.5 h-1.5 rounded-full bg-blue-400" />}
+                  </button>
+                  <button
+                    onClick={() => setActiveTab('rekap')}
+                    className="w-full px-7 py-1 text-left text-slate-300 hover:text-[#72aee6]"
+                  >
+                    Rekap Nilai Siswa
+                  </button>
+                </div>
+              )}
+            </div>
 
-        <button
-          onClick={() => setActiveTab('input-siswa')}
-          className={`py-3.5 px-4 font-bold text-xs border-b-2 flex items-center gap-2 shrink-0 transition-all ${
-            activeTab === 'input-siswa'
-              ? 'border-indigo-600 text-indigo-600'
-              : 'border-transparent text-slate-500 hover:text-slate-800'
-          }`}
-        >
-          <Upload className="w-4 h-4 text-emerald-600" />
-          <span>Input Data Siswa (File/Manual)</span>
-        </button>
+            {/* 2. Bank Soal dengan AI */}
+            <button
+              onClick={() => {
+                setActiveTab('buat-soal-ai');
+                setIsMobileMenuOpen(false);
+              }}
+              className={`w-full px-3 py-2 text-xs flex items-center justify-start gap-2.5 transition-all text-left ${
+                activeTab === 'buat-soal-ai'
+                  ? 'bg-[#2271b1] text-white font-bold'
+                  : 'text-[#c3c4c7] hover:bg-[#13171a] hover:text-[#72aee6]'
+              }`}
+              title="Bank Soal dengan AI"
+            >
+              <Sparkles className={`w-4 h-4 shrink-0 ${activeTab === 'buat-soal-ai' ? 'text-amber-300' : 'text-amber-400'}`} />
+              {!isSidebarCollapsed && (
+                <>
+                  <span className="flex-1 truncate">Bank Soal AI</span>
+                  <span className="text-[9px] bg-amber-500/20 text-amber-300 border border-amber-500/40 px-1 rounded font-bold">
+                    Gemini
+                  </span>
+                </>
+              )}
+            </button>
 
-        <button
-          onClick={() => setActiveTab('analisis')}
-          className={`py-3.5 px-4 font-bold text-xs border-b-2 flex items-center gap-2 shrink-0 transition-all ${
-            activeTab === 'analisis'
-              ? 'border-indigo-600 text-indigo-600'
-              : 'border-transparent text-slate-500 hover:text-slate-800'
-          }`}
-        >
-          <BarChart3 className="w-4 h-4" />
-          <span>Analisis Butir Soal</span>
-        </button>
+            {/* 3. Input Data Siswa */}
+            <button
+              onClick={() => {
+                setActiveTab('input-siswa');
+                setIsMobileMenuOpen(false);
+              }}
+              className={`w-full px-3 py-2 text-xs flex items-center justify-start gap-2.5 transition-all text-left ${
+                activeTab === 'input-siswa'
+                  ? 'bg-[#2271b1] text-white font-bold'
+                  : 'text-[#c3c4c7] hover:bg-[#13171a] hover:text-[#72aee6]'
+              }`}
+              title="Input Data Siswa"
+            >
+              <Upload className="w-4 h-4 shrink-0" />
+              {!isSidebarCollapsed && (
+                <>
+                  <span className="flex-1 truncate">Input Data Siswa</span>
+                  {studentsMaster.length > 0 && (
+                    <span className="text-[10px] bg-[#2c3338] text-slate-300 px-1.5 py-0.2 rounded font-mono">
+                      {studentsMaster.length}
+                    </span>
+                  )}
+                </>
+              )}
+            </button>
 
-        <button
-          onClick={() => setActiveTab('pengaturan')}
-          className={`py-3.5 px-4 font-bold text-xs border-b-2 flex items-center gap-2 shrink-0 transition-all ${
-            activeTab === 'pengaturan'
-              ? 'border-indigo-600 text-indigo-600'
-              : 'border-transparent text-slate-500 hover:text-slate-800'
-          }`}
-        >
-          <Sliders className="w-4 h-4" />
-          <span>Batasan & Pengaturan Kuis</span>
-        </button>
-      </div>
+            {/* 4. Analisis Butir Soal */}
+            <button
+              onClick={() => {
+                setActiveTab('analisis');
+                setIsMobileMenuOpen(false);
+              }}
+              className={`w-full px-3 py-2 text-xs flex items-center justify-start gap-2.5 transition-all text-left ${
+                activeTab === 'analisis'
+                  ? 'bg-[#2271b1] text-white font-bold'
+                  : 'text-[#c3c4c7] hover:bg-[#13171a] hover:text-[#72aee6]'
+              }`}
+              title="Analisis Butir Soal"
+            >
+              <BarChart3 className="w-4 h-4 shrink-0" />
+              {!isSidebarCollapsed && <span className="flex-1 truncate">Analisis Butir Soal</span>}
+            </button>
 
-      {/* Tab Content: Buat Soal dengan AI */}
-      {activeTab === 'buat-soal-ai' && (
-        <AiQuestionGenerator
-          currentQuestions={questions}
-          onSaveQuestions={onSaveQuestions}
-        />
-      )}
+            {/* 5. Batasan & Pengaturan Kuis */}
+            <button
+              onClick={() => {
+                setActiveTab('pengaturan');
+                setIsMobileMenuOpen(false);
+              }}
+              className={`w-full px-3 py-2 text-xs flex items-center justify-start gap-2.5 transition-all text-left ${
+                activeTab === 'pengaturan'
+                  ? 'bg-[#2271b1] text-white font-bold'
+                  : 'text-[#c3c4c7] hover:bg-[#13171a] hover:text-[#72aee6]'
+              }`}
+              title="Batasan & Pengaturan Kuis"
+            >
+              <Sliders className="w-4 h-4 shrink-0" />
+              {!isSidebarCollapsed && <span className="flex-1 truncate">Pengaturan Kuis</span>}
+            </button>
+
+            {/* Divider */}
+            <div className="border-t border-[#3c434a] my-2 mx-2" />
+
+            {/* Export Excel Tool */}
+            <button
+              onClick={() => exportRecapToExcel(submissions, selectedClass, settings.kkmScore)}
+              className="w-full px-3 py-2 text-xs flex items-center justify-start gap-2.5 text-[#c3c4c7] hover:bg-[#13171a] hover:text-emerald-400 transition-all text-left"
+              title="Download Rekap Nilai ke Excel"
+            >
+              <FileSpreadsheet className="w-4 h-4 text-emerald-500 shrink-0" />
+              {!isSidebarCollapsed && <span className="flex-1 truncate">Export Excel</span>}
+            </button>
+
+            {/* Print Laporan Tool */}
+            <button
+              onClick={() => printClassRecap(submissions, selectedClass, settings.kkmScore)}
+              className="w-full px-3 py-2 text-xs flex items-center justify-start gap-2.5 text-[#c3c4c7] hover:bg-[#13171a] hover:text-white transition-all text-left"
+              title="Cetak Rekap Nilai Format A4"
+            >
+              <Printer className="w-4 h-4 text-blue-400 shrink-0" />
+              {!isSidebarCollapsed && <span className="flex-1 truncate">Cetak Laporan (A4)</span>}
+            </button>
+          </div>
+
+          {/* Bottom Sidebar: Collapse Menu Button */}
+          <div className="border-t border-[#3c434a] p-2 hidden md:block">
+            <button
+              onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
+              className="w-full px-2.5 py-1.5 text-[11px] text-[#c3c4c7] hover:text-[#72aee6] hover:bg-[#13171a] rounded flex items-center gap-2 transition-colors text-left"
+              title={isSidebarCollapsed ? 'Perluas Menu' : 'Sembunyikan Menu'}
+            >
+              {isSidebarCollapsed ? (
+                <ChevronRight className="w-4 h-4 shrink-0" />
+              ) : (
+                <>
+                  <ChevronLeft className="w-4 h-4 shrink-0" />
+                  <span>Collapse Menu</span>
+                </>
+              )}
+            </button>
+          </div>
+        </aside>
+
+        {/* Right Main Content Area (Light Gray #f0f0f1) */}
+        <main className="flex-1 min-w-0 p-4 sm:p-6 overflow-y-auto space-y-4">
+          {/* Top Page Header (WordPress style) */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-1 gap-2">
+            <div>
+              <h1 className="text-xl sm:text-2xl font-bold text-[#1d2327]">
+                {activeTab === 'rekap' && 'Dashboard Rekap Nilai Siswa'}
+                {activeTab === 'buat-soal-ai' && 'Bank Soal dengan AI (Gemini)'}
+                {activeTab === 'input-siswa' && 'Input & Manajemen Data Siswa'}
+                {activeTab === 'analisis' && 'Analisis Butir Soal'}
+                {activeTab === 'pengaturan' && 'Batasan & Pengaturan Ujian'}
+              </h1>
+              <p className="text-xs text-[#646970] mt-0.5">
+                Chapter 1: Introducing my self and other (Descriptive Text) • SMP Kelas VII
+              </p>
+            </div>
+
+            {/* Screen Options & Help dropdown badges */}
+            <div className="flex items-center gap-1.5 self-start sm:self-center">
+              <button
+                onClick={() => setShowScreenOptions(!showScreenOptions)}
+                className="text-[11px] bg-white border border-[#c3c4c7] text-[#2c3338] px-2.5 py-1 rounded shadow-2xs font-medium hover:bg-[#f6f7f7] flex items-center gap-1"
+              >
+                <span>Screen Options</span>
+                <ChevronDown className="w-3 h-3" />
+              </button>
+              <button
+                onClick={() => setShowHelp(!showHelp)}
+                className="text-[11px] bg-white border border-[#c3c4c7] text-[#2c3338] px-2.5 py-1 rounded shadow-2xs font-medium hover:bg-[#f6f7f7] flex items-center gap-1"
+              >
+                <span>Help</span>
+                <ChevronDown className="w-3 h-3" />
+              </button>
+            </div>
+          </div>
+
+          {/* Expandable Screen Options / Help Drawer if opened */}
+          {showScreenOptions && (
+            <div className="bg-white border border-[#c3c4c7] p-3 rounded text-xs space-y-1 text-[#2c3338]">
+              <p className="font-bold">Pengaturan Tampilan Kolom:</p>
+              <p className="text-slate-500 text-[11px]">
+                Semua widget portal guru aktif: Status Kuis, Total Peserta, Rata-rata Nilai, dan Bank Soal.
+              </p>
+            </div>
+          )}
+
+          {showHelp && (
+            <div className="bg-white border border-[#c3c4c7] p-3 rounded text-xs space-y-1 text-[#2c3338]">
+              <p className="font-bold">Bantuan Penggunaan Dashboard Guru:</p>
+              <p className="text-slate-500 text-[11px]">
+                Gunakan menu di sebelah kiri untuk berpindah modul: Rekapitulasi nilai, Generator soal AI, Input data siswa, Analisis soal, dan Pengaturan kuota.
+              </p>
+            </div>
+          )}
+
+          {/* WordPress Dashboard Widgets Grid (Site Health & At a Glance style) */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
+            {/* Widget 1: Site Health / Status Kuis */}
+            <div className="bg-white border border-[#c3c4c7] shadow-xs p-3.5 flex items-center gap-3 rounded">
+              <div className="w-10 h-10 rounded-full border-2 border-emerald-500 flex items-center justify-center text-emerald-600 bg-emerald-50 shrink-0">
+                <CheckCircle className="w-5 h-5" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="text-[10px] uppercase font-bold text-[#646970]">Status Kuis</p>
+                <p className="text-sm font-bold text-[#1d2327]">Kondisi Baik</p>
+                <p className="text-[11px] text-[#646970]">
+                  KKM: <strong className="text-emerald-700">{settings.kkmScore}</strong> • Kelas: {selectedClass}
+                </p>
+              </div>
+            </div>
+
+            {/* Widget 2: Total Peserta */}
+            <div className="bg-white border border-[#c3c4c7] shadow-xs p-3.5 flex items-center gap-3 rounded">
+              <div className="w-10 h-10 rounded-lg bg-blue-50 text-[#2271b1] flex items-center justify-center shrink-0">
+                <Users className="w-5 h-5" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="text-[10px] uppercase font-bold text-[#646970]">Total Peserta</p>
+                <div className="flex items-baseline gap-1.5">
+                  <span className="text-xl font-bold text-[#1d2327]">{totalSubmissions}</span>
+                  <span className="text-xs text-[#646970]">siswa</span>
+                </div>
+                <p className="text-[11px] text-emerald-700 font-semibold">
+                  Tuntas: {passedSubmissions} ({passRate}%)
+                </p>
+              </div>
+            </div>
+
+            {/* Widget 3: Rata-rata Skor */}
+            <div className="bg-white border border-[#c3c4c7] shadow-xs p-3.5 flex items-center gap-3 rounded">
+              <div className="w-10 h-10 rounded-lg bg-indigo-50 text-indigo-700 flex items-center justify-center shrink-0">
+                <Activity className="w-5 h-5" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="text-[10px] uppercase font-bold text-[#646970]">Rata-Rata Nilai</p>
+                <div className="flex items-baseline gap-1.5">
+                  <span className="text-xl font-bold text-[#1d2327]">{averageScore}</span>
+                  <span className="text-xs text-[#646970]">/ 100</span>
+                </div>
+                <p className="text-[11px] text-[#646970]">
+                  Tertinggi: <strong className="text-slate-800">{highestScore}</strong>
+                </p>
+              </div>
+            </div>
+
+            {/* Widget 4: Database Siswa & Bank Soal */}
+            <div className="bg-white border border-[#c3c4c7] shadow-xs p-3.5 flex items-center gap-3 rounded">
+              <div className="w-10 h-10 rounded-lg bg-amber-50 text-amber-700 flex items-center justify-center shrink-0">
+                <BookOpen className="w-5 h-5" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="text-[10px] uppercase font-bold text-[#646970]">Bank Soal Aktif</p>
+                <div className="flex items-baseline gap-1.5">
+                  <span className="text-xl font-bold text-[#1d2327]">{questions.length}</span>
+                  <span className="text-xs text-[#646970]">butir soal</span>
+                </div>
+                <p className="text-[11px] text-indigo-700 font-medium">
+                  {studentsMaster.length} siswa terdaftar
+                </p>
+              </div>
+            </div>
+          </div>
+          {/* Tab Content: Buat Soal dengan AI */}
+          {activeTab === 'buat-soal-ai' && (
+            <AiQuestionGenerator
+              currentQuestions={questions}
+              onSaveQuestions={onSaveQuestions}
+            />
+          )}
 
       {/* Tab Content: Rekap Nilai Siswa */}
       {activeTab === 'rekap' && (
@@ -343,11 +540,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
 
               {submissions.length > 0 && (
                 <button
-                  onClick={() => {
-                    if (window.confirm('PERINGATAN: Yakin ingin mengosongkan seluruh riwayat nilai siswa secara permanen?')) {
-                      onClearAllSubmissions();
-                    }
-                  }}
+                  onClick={() => setShowClearAllModal(true)}
                   className="px-3.5 py-2 text-rose-600 hover:bg-rose-50 font-bold text-xs rounded-xl border border-rose-200 transition-all flex items-center gap-1.5"
                 >
                   <Trash2 className="w-3.5 h-3.5" />
@@ -447,7 +640,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
               const correctPct = totalAttempted > 0 ? Math.round((correctCount / totalAttempted) * 100) : 0;
 
               return (
-                <div key={q.id} className="p-4 bg-slate-50 rounded-2xl border border-slate-200/80 space-y-2">
+                <div key={`analysis-${q.id}-${idx}`} className="p-4 bg-slate-50 rounded-2xl border border-slate-200/80 space-y-2">
                   <div className="flex items-center justify-between text-xs">
                     <span className="font-bold text-slate-800">
                       Soal {idx + 1}: {q.topic}
@@ -622,6 +815,8 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
           </div>
         </div>
       )}
+        </main>
+      </div>
 
       {/* Delete Confirmation Modal */}
       {deleteConfirmId && (
@@ -643,6 +838,40 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                 className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs rounded-xl"
               >
                 Hapus Permanen
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Clear All Confirmation Modal */}
+      {showClearAllModal && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl p-6 max-w-sm w-full space-y-4 shadow-xl border border-slate-200">
+            <div className="w-12 h-12 rounded-2xl bg-rose-50 text-rose-600 flex items-center justify-center mx-auto">
+              <AlertTriangle className="w-6 h-6" />
+            </div>
+            <div className="text-center space-y-1">
+              <h3 className="text-base font-extrabold text-slate-800">Kosongkan Seluruh Rekap?</h3>
+              <p className="text-xs text-slate-500">
+                PERINGATAN: Tindakan ini akan menghapus seluruh data riwayat ujian ({submissions.length} siswa) secara permanen.
+              </p>
+            </div>
+            <div className="flex gap-2 pt-2">
+              <button
+                onClick={() => setShowClearAllModal(false)}
+                className="flex-1 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl transition-all"
+              >
+                Batal
+              </button>
+              <button
+                onClick={() => {
+                  setShowClearAllModal(false);
+                  onClearAllSubmissions();
+                }}
+                className="flex-1 py-2.5 bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs rounded-xl shadow-xs transition-all"
+              >
+                Ya, Kosongkan
               </button>
             </div>
           </div>
