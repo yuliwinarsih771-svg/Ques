@@ -143,6 +143,15 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
         {/* Right Side: Quick Action & User Greeting */}
         <div className="flex items-center gap-2 sm:gap-3 text-[11px]">
           <button
+            onClick={() => setActiveTab('input-siswa')}
+            className="hidden sm:inline-flex items-center gap-1 px-2 py-0.5 bg-[#2c3338] hover:bg-[#3c434a] text-blue-300 font-semibold rounded text-[11px] transition-colors"
+            title="Upload / Import Data Siswa Sesuai Template"
+          >
+            <Upload className="w-3 h-3 text-blue-400" />
+            <span>Import Siswa</span>
+          </button>
+
+          <button
             onClick={() => exportRecapToExcel(submissions, selectedClass, settings.kkmScore)}
             className="hidden sm:inline-flex items-center gap-1 px-2 py-0.5 bg-[#2c3338] hover:bg-[#3c434a] text-emerald-400 font-semibold rounded text-[11px] transition-colors"
             title="Download Excel"
@@ -267,7 +276,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
               )}
             </button>
 
-            {/* 3. Input Data Siswa */}
+            {/* 3. Upload & Data Siswa */}
             <button
               onClick={() => {
                 setActiveTab('input-siswa');
@@ -278,12 +287,12 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                   ? 'bg-[#2271b1] text-white font-bold'
                   : 'text-[#c3c4c7] hover:bg-[#13171a] hover:text-[#72aee6]'
               }`}
-              title="Input Data Siswa"
+              title="Upload & Data Siswa"
             >
               <Upload className="w-4 h-4 shrink-0" />
               {!isSidebarCollapsed && (
                 <>
-                  <span className="flex-1 truncate">Input Data Siswa</span>
+                  <span className="flex-1 truncate">Upload & Data Siswa</span>
                   {studentsMaster.length > 0 && (
                     <span className="text-[10px] bg-[#2c3338] text-slate-300 px-1.5 py-0.2 rounded font-mono">
                       {studentsMaster.length}
@@ -476,18 +485,22 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
             </div>
 
             {/* Widget 4: Database Siswa & Bank Soal */}
-            <div className="bg-white border border-[#c3c4c7] shadow-xs p-3.5 flex items-center gap-3 rounded">
+            <div
+              onClick={() => setActiveTab('input-siswa')}
+              className="bg-white border border-[#c3c4c7] hover:border-indigo-400 shadow-xs p-3.5 flex items-center gap-3 rounded cursor-pointer transition-colors"
+              title="Klik untuk Kelola & Import Data Siswa"
+            >
               <div className="w-10 h-10 rounded-lg bg-amber-50 text-amber-700 flex items-center justify-center shrink-0">
                 <BookOpen className="w-5 h-5" />
               </div>
               <div className="min-w-0 flex-1">
-                <p className="text-[10px] uppercase font-bold text-[#646970]">Bank Soal Aktif</p>
+                <p className="text-[10px] uppercase font-bold text-[#646970]">Data Siswa & Bank Soal</p>
                 <div className="flex items-baseline gap-1.5">
-                  <span className="text-xl font-bold text-[#1d2327]">{questions.length}</span>
-                  <span className="text-xs text-[#646970]">butir soal</span>
+                  <span className="text-xl font-bold text-[#1d2327]">{studentsMaster.length}</span>
+                  <span className="text-xs text-[#646970]">siswa terdata</span>
                 </div>
-                <p className="text-[11px] text-indigo-700 font-medium">
-                  {studentsMaster.length} siswa terdaftar
+                <p className="text-[11px] text-indigo-700 font-semibold hover:underline">
+                  + Upload Siswa (Template)
                 </p>
               </div>
             </div>
@@ -532,10 +545,11 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
             <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
               <button
                 onClick={() => setActiveTab('input-siswa')}
-                className="px-3.5 py-2 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 font-bold text-xs rounded-xl border border-indigo-200/60 transition-all flex items-center gap-1.5"
+                className="px-3.5 py-2 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 font-bold text-xs rounded-xl border border-indigo-200/60 transition-all flex items-center gap-1.5 shadow-2xs"
+                title="Unggah / Import data siswa sesuai template Excel"
               >
-                <Plus className="w-3.5 h-3.5" />
-                <span>+ Input Data Siswa</span>
+                <Upload className="w-3.5 h-3.5 text-indigo-600" />
+                <span>Upload & Import Data Siswa</span>
               </button>
 
               {submissions.length > 0 && (

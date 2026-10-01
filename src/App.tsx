@@ -80,7 +80,21 @@ export default function App() {
   const [studentsMaster, setStudentsMaster] = useState<StudentMasterData[]>(() => {
     try {
       const saved = localStorage.getItem(STORAGE_KEYS.MASTER_STUDENTS);
-      return saved ? JSON.parse(saved) : INITIAL_STUDENT_MASTER;
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          const existingClasses = new Set(parsed.map((s: StudentMasterData) => s.className));
+          // If classes like 7C, 7D, 7E, etc. are not yet in stored master, merge them automatically
+          const missingStudents = INITIAL_STUDENT_MASTER.filter((s) => !existingClasses.has(s.className));
+          if (missingStudents.length > 0) {
+            const merged = [...parsed, ...missingStudents];
+            localStorage.setItem(STORAGE_KEYS.MASTER_STUDENTS, JSON.stringify(merged));
+            return merged;
+          }
+          return parsed;
+        }
+      }
+      return INITIAL_STUDENT_MASTER;
     } catch {
       return INITIAL_STUDENT_MASTER;
     }
