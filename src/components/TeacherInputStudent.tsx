@@ -14,10 +14,14 @@ import {
   Sparkles,
   RotateCcw,
   Check,
+  Eye,
+  X,
+  Loader2,
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { StudentMasterData } from '../types';
 import { CLASS_SAMPLE_STUDENTS, INITIAL_STUDENT_MASTER } from '../data/quizData';
+import { soundManager } from '../utils/audio';
 
 interface TeacherInputStudentProps {
   studentsMaster: StudentMasterData[];
@@ -35,6 +39,14 @@ interface LastUploadedInfo {
   crossClassDuplicates: Array<{ name: string; targetClass: string; existingClass: string }>;
 }
 
+interface StagedPreviewInfo {
+  fileName: string;
+  fileSize: string;
+  students: StudentMasterData[];
+  classesSummary: Record<string, number>;
+  crossClassDuplicates: Array<{ name: string; targetClass: string; existingClass: string }>;
+}
+
 export const TeacherInputStudent: React.FC<TeacherInputStudentProps> = ({
   studentsMaster,
   onSaveMaster,
@@ -45,12 +57,18 @@ export const TeacherInputStudent: React.FC<TeacherInputStudentProps> = ({
   const [templateClass, setTemplateClass] = useState<string>('7A');
   const [statusMessage, setStatusMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [confirmClearClass, setConfirmClearClass] = useState<boolean>(false);
+  const [confirmClearAllClasses, setConfirmClearAllClasses] = useState<boolean>(false);
   const [confirmResetAll, setConfirmResetAll] = useState<boolean>(false);
   const [isDragging, setIsDragging] = useState<boolean>(false);
 
   // Undo / Backup state
   const [previousMaster, setPreviousMaster] = useState<StudentMasterData[] | null>(null);
   const [lastUploadedInfo, setLastUploadedInfo] = useState<LastUploadedInfo | null>(null);
+
+  // Staged Upload Preview & Mode state
+  const [stagedPreview, setStagedPreview] = useState<StagedPreviewInfo | null>(null);
+  const [importMode, setImportMode] = useState<'replace' | 'append'>('replace');
+  const [isProcessing, setIsProcessing] = useState<boolean>(false);
 
   // Manual input state
   const [manualName, setManualName] = useState('');
@@ -148,6 +166,23 @@ export const TeacherInputStudent: React.FC<TeacherInputStudentProps> = ({
     }
   };
 
+  // Helper: Normalize class string into 7A..7H
+  const normalizeClass = (raw: string, fallback: string): string => {
+    if (!raw) return fallback;
+    const str = String(raw).trim().toUpperCase();
+    const m = str.match(/(?:KELAS|ROMBEL)?\s*(?:7|VII)[\s._-]*([A-H])/i);
+    if (m && m[1]) {
+      return `7${m[1].toUpperCase()}`;
+    }
+    if (/^[A-H]$/i.test(str)) {
+      return `7${str.toUpperCase()}`;
+    }
+    if (['7A', '7B', '7C', '7D', '7E', '7F', '7G', '7H'].includes(str)) {
+      return str;
+    }
+    return fallback;
+  };
+
   // Smart parser: detect columns and parse rows
   const parseRowsToStudents = (rows: unknown[][], defaultClass: string): StudentMasterData[] => {
     if (!rows || rows.length === 0) return [];
@@ -158,19 +193,23 @@ export const TeacherInputStudent: React.FC<TeacherInputStudentProps> = ({
     let colClass = -1;
     let colNisn = -1;
 
-    // 1. Find header row in first 10 rows
-    for (let r = 0; r < Math.min(rows.length, 10); r++) {
+    // 1. Find header row in first 12 rows
+    for (let r = 0; r < Math.min(rows.length, 12); r++) {
       const row = rows[r];
       if (!Array.isArray(row)) continue;
 
-      const cells = row.map((c) => String(c || '').trim().toLowerCase());
+      const cells = row.map((c) => String(c ?? '').trim().toLowerCase());
 
-      const foundName = cells.findIndex((c) => /^(nama|name|siswa|peserta|student)/i.test(c));
-      const foundNo = cells.findIndex((c) => /^(no|absen|nomor|urut|number)/i.test(c));
-      const foundClass = cells.findIndex((c) => /^(kelas|class|rombel|tingkat)/i.test(c));
-      const foundNisn = cells.findIndex((c) => /^(nisn|nis|id)/i.test(c));
+      const foundName = cells.findIndex(
+        (c) => /(nama|name|siswa|peserta|murid|student)/i.test(c) && !/(sekolah|guru|pengajar|mapel|wali)/i.test(c)
+      );
+      const foundNo = cells.findIndex(
+        (c) => /^(no|nomor|absen|urut|number|#)$/i.test(c) || /^(no\.|nomor\s*urut|no\s*absen)/i.test(c)
+      );
+      const foundClass = cells.findIndex((c) => /(kelas|class|rombel|tingkat)/i.test(c));
+      const foundNisn = cells.findIndex((c) => /(nisn|nis|id|induk)/i.test(c));
 
-      if (foundName !== -1 || (foundNo !== -1 && cells.length >= 2)) {
+      if (foundName !== -1) {
         headerIndex = r;
         colName = foundName;
         colNo = foundNo;
@@ -182,14 +221,16 @@ export const TeacherInputStudent: React.FC<TeacherInputStudentProps> = ({
 
     // Fallback default column indexes if no explicit header row was identified
     if (headerIndex === -1) {
-      headerIndex = -1; // start from row 0
+      const firstRow = rows[0] || [];
+      const isFirstRowData = firstRow.some((c) => !isNaN(Number(c)) && Number(c) > 0);
+      headerIndex = isFirstRowData ? -1 : 0;
       colNo = 0;
       colName = 1;
       colClass = 2;
       colNisn = 3;
     } else {
-      // If colName was not specifically named but colNo exists, default colName to next column
       if (colName === -1 && colNo !== -1) colName = colNo + 1;
+      if (colNo === -1 && colName > 0) colNo = colName - 1;
     }
 
     const startRow = headerIndex + 1;
@@ -211,9 +252,8 @@ export const TeacherInputStudent: React.FC<TeacherInputStudentProps> = ({
       let rawClass = colClass >= 0 && colClass < rowStr.length ? rowStr[colClass] : '';
       let rawNisn = colNisn >= 0 && colNisn < rowStr.length ? rowStr[colNisn] : '';
 
-      // If colName was somehow missed or swapped
+      // If colName was empty, search for first valid text column
       if (!rawName) {
-        // Find first non-numeric column with > 2 characters
         for (let i = 0; i < rowStr.length; i++) {
           if (i !== colNo && isNaN(Number(rowStr[i])) && rowStr[i].length >= 3) {
             rawName = rowStr[i];
@@ -223,34 +263,23 @@ export const TeacherInputStudent: React.FC<TeacherInputStudentProps> = ({
       }
 
       // If rawName looks like a title row, skip
-      if (/^(daftar siswa|rekap|kelas|tahun pelajaran|mata pelajaran|nomor urut)/i.test(rawName)) {
+      if (/^(daftar siswa|rekap|kelas|tahun pelajaran|mata pelajaran|nomor urut|tanda tangan)/i.test(rawName)) {
         continue;
       }
 
       if (rawName && rawName.length >= 2) {
-        // Parse attendance number
         let absen = autoAbsen;
-        const parsedNum = Number(rawNo);
+        const parsedNum = parseInt(rawNo, 10);
         if (!isNaN(parsedNum) && parsedNum > 0 && parsedNum <= 100) {
           absen = parsedNum;
         }
 
-        // Parse class
-        let studentClass = defaultClass;
-        if (rawClass && /^(7|VII)[A-Ha-h]?/i.test(rawClass)) {
-          // Normalize class format (e.g., "7 A" -> "7A", "VII A" -> "7A")
-          const cleanClass = rawClass.replace(/\s+/g, '').toUpperCase();
-          if (cleanClass.startsWith('VII')) {
-            studentClass = '7' + cleanClass.slice(3);
-          } else {
-            studentClass = cleanClass;
-          }
-        }
+        const studentClass = normalizeClass(rawClass, defaultClass);
 
         parsedStudents.push({
           id: `std-${Date.now()}-${r}-${Math.random().toString(36).substr(2, 5)}`,
           name: rawName,
-          className: studentClass || defaultClass,
+          className: studentClass,
           attendanceNumber: absen,
           nisn: rawNisn && !isNaN(Number(rawNisn)) ? rawNisn : undefined,
         });
@@ -262,190 +291,169 @@ export const TeacherInputStudent: React.FC<TeacherInputStudentProps> = ({
     return parsedStudents;
   };
 
-  // Process selected file (Excel / CSV / TXT) and SAVE DIRECTLY into database
-  const processFile = (file: File) => {
-    const isExcel = /\.(xlsx|xls)$/i.test(file.name);
+  // Process selected file (Excel / CSV / TXT) and show STAGED PREVIEW for confirmation
+  const processFile = async (file: File) => {
+    setIsProcessing(true);
+    setStatusMessage(null);
+    setStagedPreview(null);
+
     const fileSizeStr =
       file.size < 1024 * 1024
         ? `${(file.size / 1024).toFixed(1)} KB`
         : `${(file.size / (1024 * 1024)).toFixed(1)} MB`;
 
-    if (isExcel) {
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        try {
-          const data = new Uint8Array(event.target?.result as ArrayBuffer);
-          const workbook = XLSX.read(data, { type: 'array' });
+    try {
+      const buffer = await file.arrayBuffer();
+      let allParsedStudents: StudentMasterData[] = [];
 
-          let parsedStudents: StudentMasterData[] = [];
+      try {
+        const workbook = XLSX.read(buffer, { type: 'array', cellDates: true, raw: false });
 
-          // Process all sheets in the workbook
-          for (const sheetName of workbook.SheetNames) {
-            const worksheet = workbook.Sheets[sheetName];
-            const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 }) as unknown[][];
-            if (jsonData && jsonData.length > 0) {
-              let sheetDefaultClass = selectedClass;
-              const matchClass = sheetName.match(/(7|VII)\s*([A-Ha-h])/i);
-              if (matchClass) {
-                sheetDefaultClass = `7${matchClass[2].toUpperCase()}`;
-              }
-              const sheetStudents = parseRowsToStudents(jsonData, sheetDefaultClass);
-              parsedStudents = [...parsedStudents, ...sheetStudents];
+        for (const sheetName of workbook.SheetNames) {
+          const worksheet = workbook.Sheets[sheetName];
+          if (!worksheet) continue;
+
+          const jsonData = XLSX.utils.sheet_to_json(worksheet, {
+            header: 1,
+            defval: '',
+            blankrows: false,
+          }) as unknown[][];
+
+          if (jsonData && jsonData.length > 0) {
+            let sheetDefaultClass = selectedClass;
+            const matchClass = sheetName.match(/(?:KELAS|ROMBEL)?\s*(?:7|VII)[\s._-]*([A-H])/i);
+            if (matchClass && matchClass[1]) {
+              sheetDefaultClass = `7${matchClass[1].toUpperCase()}`;
             }
+
+            const sheetStudents = parseRowsToStudents(jsonData, sheetDefaultClass);
+            allParsedStudents = [...allParsedStudents, ...sheetStudents];
           }
+        }
+      } catch {
+        // XLSX parsing fallback to text parser handled below
+      }
 
-          if (parsedStudents.length === 0) {
-            setStatusMessage({
-              type: 'error',
-              text: 'Tidak ada data siswa yang terbaca dari file Excel tersebut. Pastikan memuat kolom No dan Nama Siswa sesuai template.',
-            });
-            return;
-          }
+      // Fallback to text/CSV parser if workbook returned no students
+      if (allParsedStudents.length === 0) {
+        const text = new TextDecoder('utf-8').decode(buffer);
+        const lines = text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+        const rows = lines.map((line) => {
+          const delimiter = line.includes('\t') ? '\t' : line.includes(';') ? ';' : ',';
+          return line.split(delimiter).map((p) => p.replace(/^["']|["']$/g, '').trim());
+        });
+        allParsedStudents = parseRowsToStudents(rows, selectedClass);
+      }
 
-          // Compute summary by class
-          const summary: Record<string, number> = {};
-          parsedStudents.forEach((s) => {
-            summary[s.className] = (summary[s.className] || 0) + 1;
-          });
+      if (allParsedStudents.length === 0) {
+        setStatusMessage({
+          type: 'error',
+          text: `File "${file.name}" tidak dapat diurai. Pastikan file Excel/CSV memuat kolom Nomor Urut dan Nama Siswa.`,
+        });
+        setIsProcessing(false);
+        return;
+      }
 
-          // Check cross-class duplicates
-          const crossClassDuplicates: Array<{ name: string; targetClass: string; existingClass: string }> = [];
-          parsedStudents.forEach((s) => {
-            const match = studentsMaster.find(
-              (m) => m.className !== s.className && m.name.trim().toLowerCase() === s.name.trim().toLowerCase()
-            );
-            if (match) {
-              crossClassDuplicates.push({
-                name: s.name,
-                targetClass: s.className,
-                existingClass: match.className,
-              });
-            }
-          });
+      // Compute summary by class
+      const summary: Record<string, number> = {};
+      allParsedStudents.forEach((s) => {
+        summary[s.className] = (summary[s.className] || 0) + 1;
+      });
 
-          // Backup previous master for undo
-          setPreviousMaster([...studentsMaster]);
-
-          // Update master database: keep other classes, replace classes present in upload
-          const importedClasses = Object.keys(summary);
-          const kept = studentsMaster.filter((s) => !importedClasses.includes(s.className));
-          const newMaster = [...kept, ...parsedStudents];
-
-          onSaveMaster(newMaster);
-
-          // If single class was imported, switch active view to it
-          if (importedClasses.length === 1 && importedClasses[0]) {
-            setSelectedClass(importedClasses[0]);
-            setTemplateClass(importedClasses[0]);
-          }
-
-          setLastUploadedInfo({
-            fileName: file.name,
-            fileSize: fileSizeStr,
-            count: parsedStudents.length,
-            classesSummary: summary,
-            timestamp: new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }),
-            importedStudents: parsedStudents,
-            crossClassDuplicates,
-          });
-
-          setStatusMessage({
-            type: 'success',
-            text: `✅ File "${file.name}" berhasil diunggah! Sebanyak ${parsedStudents.length} data siswa berhasil dimasukkan ke database.`,
-          });
-
-          if (onImportSuccess) onImportSuccess(parsedStudents.length);
-        } catch {
-          setStatusMessage({
-            type: 'error',
-            text: 'Gagal memproses file Excel. Pastikan file dalam format .xlsx atau .xls dan tidak terkunci password.',
+      // Check cross-class duplicates
+      const crossClassDuplicates: Array<{ name: string; targetClass: string; existingClass: string }> = [];
+      allParsedStudents.forEach((s) => {
+        const match = studentsMaster.find(
+          (m) => m.className !== s.className && m.name.trim().toLowerCase() === s.name.trim().toLowerCase()
+        );
+        if (match) {
+          crossClassDuplicates.push({
+            name: s.name,
+            targetClass: s.className,
+            existingClass: match.className,
           });
         }
-      };
-      reader.readAsArrayBuffer(file);
-    } else {
-      // Text or CSV
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        try {
-          const text = event.target?.result as string;
-          if (!text) {
-            setStatusMessage({ type: 'error', text: 'File kosong atau tidak terbaca.' });
-            return;
-          }
+      });
 
-          // Parse CSV lines into array of arrays
-          const lines = text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
-          const rows = lines.map((line) => line.split(/[\t;,]+/).map((part) => part.trim()));
+      setStagedPreview({
+        fileName: file.name,
+        fileSize: fileSizeStr,
+        students: allParsedStudents,
+        classesSummary: summary,
+        crossClassDuplicates,
+      });
 
-          const parsedStudents = parseRowsToStudents(rows, selectedClass);
-
-          if (parsedStudents.length === 0) {
-            setStatusMessage({
-              type: 'error',
-              text: 'Tidak ada data siswa yang valid dalam file CSV/TXT. Pastikan memuat kolom No dan Nama Siswa.',
-            });
-            return;
-          }
-
-          const summary: Record<string, number> = {};
-          parsedStudents.forEach((s) => {
-            summary[s.className] = (summary[s.className] || 0) + 1;
-          });
-
-          const crossClassDuplicates: Array<{ name: string; targetClass: string; existingClass: string }> = [];
-          parsedStudents.forEach((s) => {
-            const match = studentsMaster.find(
-              (m) => m.className !== s.className && m.name.trim().toLowerCase() === s.name.trim().toLowerCase()
-            );
-            if (match) {
-              crossClassDuplicates.push({
-                name: s.name,
-                targetClass: s.className,
-                existingClass: match.className,
-              });
-            }
-          });
-
-          // Backup previous master for undo
-          setPreviousMaster([...studentsMaster]);
-
-          const importedClasses = Object.keys(summary);
-          const kept = studentsMaster.filter((s) => !importedClasses.includes(s.className));
-          const newMaster = [...kept, ...parsedStudents];
-
-          onSaveMaster(newMaster);
-
-          if (importedClasses.length === 1 && importedClasses[0]) {
-            setSelectedClass(importedClasses[0]);
-            setTemplateClass(importedClasses[0]);
-          }
-
-          setLastUploadedInfo({
-            fileName: file.name,
-            fileSize: fileSizeStr,
-            count: parsedStudents.length,
-            classesSummary: summary,
-            timestamp: new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }),
-            importedStudents: parsedStudents,
-            crossClassDuplicates,
-          });
-
-          setStatusMessage({
-            type: 'success',
-            text: `✅ File "${file.name}" berhasil diunggah! Sebanyak ${parsedStudents.length} data siswa berhasil dimasukkan ke database.`,
-          });
-
-          if (onImportSuccess) onImportSuccess(parsedStudents.length);
-        } catch {
-          setStatusMessage({
-            type: 'error',
-            text: 'Terjadi kesalahan saat membaca file teks/CSV.',
-          });
-        }
-      };
-      reader.readAsText(file);
+      setStatusMessage({
+        type: 'success',
+        text: `File "${file.name}" berhasil dianalisis (${allParsedStudents.length} data siswa terdeteksi). Silakan periksa pratinjau di bawah dan klik "Konfirmasi & Simpan ke Database".`,
+      });
+    } catch {
+      setStatusMessage({
+        type: 'error',
+        text: `Gagal membaca file "${file.name}". Pastikan format file adalah .xlsx, .xls, atau .csv.`,
+      });
+    } finally {
+      setIsProcessing(false);
     }
+  };
+
+  // Confirm and commit staged import to database
+  const handleConfirmSaveImport = () => {
+    if (!stagedPreview || stagedPreview.students.length === 0) return;
+
+    // Backup current master for 1-click Undo
+    setPreviousMaster([...studentsMaster]);
+
+    let newMaster: StudentMasterData[] = [];
+    const importedClasses = Object.keys(stagedPreview.classesSummary);
+
+    if (importMode === 'replace') {
+      // Replace classes present in upload, keep others
+      const kept = studentsMaster.filter((s) => !importedClasses.includes(s.className));
+      newMaster = [...kept, ...stagedPreview.students];
+    } else {
+      // Append mode: keep existing students, add only non-duplicate students
+      const existingKeys = new Set(
+        studentsMaster.map((s) => `${s.className}-${s.name.trim().toLowerCase()}`)
+      );
+      const toAdd = stagedPreview.students.filter(
+        (s) => !existingKeys.has(`${s.className}-${s.name.trim().toLowerCase()}`)
+      );
+      newMaster = [...studentsMaster, ...toAdd];
+    }
+
+    onSaveMaster(newMaster);
+    soundManager.playSuccessSound();
+
+    if (importedClasses.length > 0 && importedClasses[0]) {
+      setSelectedClass(importedClasses[0]);
+      setTemplateClass(importedClasses[0]);
+    }
+
+    setLastUploadedInfo({
+      fileName: stagedPreview.fileName,
+      fileSize: stagedPreview.fileSize,
+      count: stagedPreview.students.length,
+      classesSummary: stagedPreview.classesSummary,
+      timestamp: new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }),
+      importedStudents: stagedPreview.students,
+      crossClassDuplicates: stagedPreview.crossClassDuplicates,
+    });
+
+    setStatusMessage({
+      type: 'success',
+      text: `🎉 Berhasil! Sebanyak ${stagedPreview.students.length} siswa dari "${stagedPreview.fileName}" telah tersimpan permanen ke database!`,
+    });
+
+    if (onImportSuccess) onImportSuccess(stagedPreview.students.length);
+    setStagedPreview(null);
+  };
+
+  // Cancel staged preview
+  const handleCancelStagedPreview = () => {
+    setStagedPreview(null);
+    if (fileInputRef.current) fileInputRef.current.value = '';
+    setStatusMessage(null);
   };
 
   // Handle standard file selection
@@ -574,10 +582,17 @@ export const TeacherInputStudent: React.FC<TeacherInputStudentProps> = ({
     setPasteText('');
   };
 
-  // Delete individual student
+  // Delete individual student permanently
   const handleDeleteStudent = (id: string) => {
+    const target = studentsMaster.find((s) => s.id === id);
     const updated = studentsMaster.filter((s) => s.id !== id);
     onSaveMaster(updated);
+    setStatusMessage({
+      type: 'success',
+      text: target
+        ? `Siswa "${target.name}" (Absen ${target.attendanceNumber}) Kelas ${target.className} berhasil dihapus permanen dari database.`
+        : 'Data siswa berhasil dihapus permanen dari database.',
+    });
   };
 
   // Filter current class students
@@ -794,33 +809,38 @@ export const TeacherInputStudent: React.FC<TeacherInputStudentProps> = ({
             </div>
           </div>
 
-          {/* STEP 2: NATIVE CLICKABLE DROPZONE & INSTANT UPLOAD */}
-          <div className="bg-white rounded-2xl p-6 sm:p-8 border border-slate-200 shadow-xs">
-            {/* The whole box is wrapped as a native clickable label */}
-            <label
-              htmlFor="native-file-upload-input"
+          {/* STEP 2: NATIVE CLICKABLE DROPZONE */}
+          <div className="bg-white rounded-2xl p-6 sm:p-8 border border-slate-200 shadow-xs space-y-6">
+            <div
               onDragOver={handleDragOver}
               onDragLeave={handleDragLeave}
               onDrop={handleDrop}
-              className={`block max-w-xl mx-auto text-center border-2 border-dashed rounded-2xl p-8 transition-all cursor-pointer select-none ${
+              onClick={() => fileInputRef.current?.click()}
+              className={`block max-w-xl mx-auto text-center border-2 border-dashed rounded-2xl p-6 sm:p-8 transition-all cursor-pointer select-none ${
                 isDragging
                   ? 'border-indigo-600 bg-indigo-50/70 scale-[1.01]'
                   : 'border-indigo-300 hover:border-indigo-600 bg-indigo-50/20 hover:bg-indigo-50/40 shadow-xs'
               }`}
             >
-              <div className="w-16 h-16 bg-indigo-100 text-indigo-700 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-2xs">
-                <Upload className="w-8 h-8" />
+              <div className="w-14 h-14 bg-indigo-100 text-indigo-700 rounded-2xl flex items-center justify-center mx-auto mb-3 shadow-2xs">
+                {isProcessing ? (
+                  <Loader2 className="w-7 h-7 animate-spin text-indigo-600" />
+                ) : (
+                  <Upload className="w-7 h-7" />
+                )}
               </div>
 
               <h3 className="text-base sm:text-lg font-extrabold text-slate-800">
-                Langkah 2: Klik atau Tarik File ke Sini untuk Upload
+                {isProcessing
+                  ? 'Sedang Membaca & Menganalisis File...'
+                  : 'Langkah 2: Klik atau Tarik File ke Sini'}
               </h3>
               <p className="text-xs sm:text-sm text-slate-600 mt-1 max-w-md mx-auto">
-                Klik di mana saja pada kotak ini untuk memilih file Excel (<strong>.xlsx, .xls</strong>) atau file teks (<strong>.csv</strong>) dari komputer / HP Anda.
+                Pilih file Excel (<strong>.xlsx, .xls</strong>) atau file teks (<strong>.csv</strong>) dari komputer / HP Anda.
               </p>
 
               {/* Supported formats badges */}
-              <div className="flex items-center justify-center gap-2 my-4">
+              <div className="flex items-center justify-center gap-2 my-3">
                 <span className="px-2.5 py-0.5 bg-emerald-100 text-emerald-800 font-bold text-[11px] rounded-md border border-emerald-300">
                   .XLSX (Excel)
                 </span>
@@ -835,7 +855,7 @@ export const TeacherInputStudent: React.FC<TeacherInputStudentProps> = ({
                 </span>
               </div>
 
-              {/* 100% NATIVE HTML FILE INPUT */}
+              {/* Native HTML file input */}
               <input
                 id="native-file-upload-input"
                 ref={fileInputRef}
@@ -845,36 +865,198 @@ export const TeacherInputStudent: React.FC<TeacherInputStudentProps> = ({
                 className="sr-only"
               />
 
-              {/* Prominent Action Button */}
+              {/* Action Buttons */}
               <div className="flex flex-col sm:flex-row items-center justify-center gap-3 mt-4">
-                <span className="w-full sm:w-auto inline-flex items-center justify-center gap-2.5 px-6 py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-sm rounded-xl shadow-md transition-all active:scale-95">
-                  <Upload className="w-5 h-5" />
-                  <span>Pilih File dari Komputer / HP</span>
-                </span>
-
                 <button
                   type="button"
                   onClick={(e) => {
                     e.stopPropagation();
-                    e.preventDefault();
-                    handleLoadDemoData();
+                    fileInputRef.current?.click();
                   }}
-                  className="w-full sm:w-auto inline-flex items-center justify-center gap-1.5 px-4 py-3 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 font-bold text-xs rounded-xl transition-all cursor-pointer"
-                  title="Muat data contoh unik untuk kelas yang dipilih"
+                  className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-6 py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs sm:text-sm rounded-xl shadow-md hover:shadow-lg transition-all active:scale-95 cursor-pointer"
+                  title="Upload file data siswa dari perangkat (Excel .xlsx / .csv)"
                 >
-                  <Sparkles className="w-4 h-4 text-amber-600" />
-                  <span>Isi Data Contoh Demo Kelas {selectedClass}</span>
+                  <Upload className="w-4 h-4" />
+                  <span>Upload Data Siswa</span>
                 </button>
               </div>
 
-              <p className="text-[11px] text-slate-500 mt-4">
-                Target Rombel Default: <strong>Kelas {selectedClass}</strong> (atau mengikuti kolom Kelas di dalam file jika tersedia)
+              <p className="text-[11px] text-slate-500 mt-3">
+                Target Rombel Default: <strong>Kelas {selectedClass}</strong> (atau mengikuti kolom/sheet Kelas di dalam file)
               </p>
-            </label>
+            </div>
+
+            {/* STEP 3: STAGED PREVIEW & CONFIRMATION BEFORE SAVING */}
+            {stagedPreview && (
+              <div className="p-5 rounded-2xl bg-indigo-50/80 border-2 border-indigo-300 shadow-md space-y-4 animate-in fade-in duration-200">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-indigo-200 pb-3">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-indigo-600 text-white flex items-center justify-center shrink-0 shadow-xs">
+                      <Eye className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <h4 className="text-sm sm:text-base font-extrabold text-indigo-950 flex items-center gap-2">
+                        <span>Langkah 3: Pratinjau Hasil Pembacaan File</span>
+                        <span className="px-2 py-0.5 rounded-full bg-indigo-200 text-indigo-900 text-[11px] font-mono">
+                          {stagedPreview.students.length} Siswa Terdeteksi
+                        </span>
+                      </h4>
+                      <p className="text-xs text-indigo-700 mt-0.5">
+                        File: <strong className="font-mono">{stagedPreview.fileName}</strong> ({stagedPreview.fileSize}) • Periksa data sebelum disimpan ke database.
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={handleCancelStagedPreview}
+                      className="px-3 py-1.5 bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 font-bold text-xs rounded-xl transition-all flex items-center gap-1 cursor-pointer"
+                    >
+                      <X className="w-3.5 h-3.5 text-slate-500" />
+                      <span>Batal</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleConfirmSaveImport}
+                      className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs rounded-xl shadow-md transition-all flex items-center gap-1.5 active:scale-95 cursor-pointer"
+                    >
+                      <Check className="w-4 h-4" />
+                      <span>Konfirmasi & Simpan ke Database</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Class summary badges & Mode selector */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {/* Class breakdown */}
+                  <div className="space-y-1.5">
+                    <span className="text-[11px] font-bold text-slate-600 uppercase tracking-wider block">
+                      Rombel yang Akan Diperbarui:
+                    </span>
+                    <div className="flex flex-wrap gap-1.5">
+                      {Object.entries(stagedPreview.classesSummary).map(([cls, cnt]) => (
+                        <span
+                          key={cls}
+                          className="px-2.5 py-1 bg-white border border-indigo-200 text-indigo-900 font-bold rounded-lg text-xs shadow-2xs"
+                        >
+                          Kelas {cls}: <strong>{cnt} siswa</strong>
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Mode selector */}
+                  <div className="space-y-1.5">
+                    <span className="text-[11px] font-bold text-slate-600 uppercase tracking-wider block">
+                      Metode Penyimpanan Data:
+                    </span>
+                    <div className="flex items-center gap-3">
+                      <label className="flex items-center gap-1.5 text-xs font-bold text-slate-700 cursor-pointer bg-white px-3 py-1.5 rounded-lg border border-slate-200 hover:border-indigo-400 shadow-2xs">
+                        <input
+                          type="radio"
+                          name="importMode"
+                          value="replace"
+                          checked={importMode === 'replace'}
+                          onChange={() => setImportMode('replace')}
+                          className="text-indigo-600 focus:ring-indigo-500"
+                        />
+                        <span>Ganti Rombel Terkait (Replace)</span>
+                      </label>
+                      <label className="flex items-center gap-1.5 text-xs font-bold text-slate-700 cursor-pointer bg-white px-3 py-1.5 rounded-lg border border-slate-200 hover:border-indigo-400 shadow-2xs">
+                        <input
+                          type="radio"
+                          name="importMode"
+                          value="append"
+                          checked={importMode === 'append'}
+                          onChange={() => setImportMode('append')}
+                          className="text-indigo-600 focus:ring-indigo-500"
+                        />
+                        <span>Gabungkan / Tambah (Append)</span>
+                      </label>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Cross-class duplicate warning if any */}
+                {stagedPreview.crossClassDuplicates.length > 0 && (
+                  <div className="p-3 bg-amber-50 border border-amber-300 rounded-xl text-xs text-amber-900 space-y-1">
+                    <div className="flex items-center gap-1.5 font-bold">
+                      <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
+                      <span>Catatan Identitas: Ditemukan {stagedPreview.crossClassDuplicates.length} nama siswa yang mirip/sama di rombel lain:</span>
+                    </div>
+                    <div className="flex flex-wrap gap-1 font-mono text-[11px] pt-1">
+                      {stagedPreview.crossClassDuplicates.slice(0, 6).map((d, i) => (
+                        <span key={i} className="px-1.5 py-0.5 bg-white border border-amber-300 rounded text-amber-900">
+                          {d.name} ({d.targetClass} vs {d.existingClass})
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Sample rows preview table */}
+                <div className="space-y-1.5">
+                  <span className="text-[11px] font-bold text-slate-600 uppercase tracking-wider block">
+                    Contoh Baris Terbaca (Maksimal 6 Baris Pertama):
+                  </span>
+                  <div className="overflow-x-auto rounded-xl border border-indigo-200 bg-white">
+                    <table className="w-full text-xs text-left">
+                      <thead className="bg-indigo-50/60 text-indigo-900 font-bold border-b border-indigo-200">
+                        <tr>
+                          <th className="py-2 px-3 text-center w-14">Absen</th>
+                          <th className="py-2 px-3">Nama Siswa</th>
+                          <th className="py-2 px-3 text-center w-20">Kelas</th>
+                          <th className="py-2 px-3 text-center w-32">NISN</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100 font-medium">
+                        {stagedPreview.students.slice(0, 6).map((s, idx) => (
+                          <tr key={idx} className="hover:bg-slate-50">
+                            <td className="py-2 px-3 text-center font-bold text-slate-600">{s.attendanceNumber}</td>
+                            <td className="py-2 px-3 font-bold text-slate-800">{s.name}</td>
+                            <td className="py-2 px-3 text-center font-bold text-indigo-700 bg-indigo-50/30">
+                              {s.className}
+                            </td>
+                            <td className="py-2 px-3 text-center text-slate-500 font-mono text-[11px]">
+                              {s.nisn || '-'}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                  {stagedPreview.students.length > 6 && (
+                    <p className="text-[11px] text-slate-500 italic text-right">
+                      ...dan {stagedPreview.students.length - 6} siswa lainnya siap disimpan.
+                    </p>
+                  )}
+                </div>
+
+                {/* Bottom Confirm Button Row */}
+                <div className="pt-2 flex flex-col sm:flex-row items-center justify-end gap-2.5">
+                  <button
+                    type="button"
+                    onClick={handleCancelStagedPreview}
+                    className="w-full sm:w-auto px-4 py-2.5 bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 font-bold text-xs rounded-xl transition-all cursor-pointer"
+                  >
+                    Batal
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleConfirmSaveImport}
+                    className="w-full sm:w-auto px-6 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs sm:text-sm rounded-xl shadow-md transition-all flex items-center justify-center gap-2 active:scale-95 cursor-pointer"
+                  >
+                    <Check className="w-4 h-4" />
+                    <span>Konfirmasi & Simpan ke Database ({stagedPreview.students.length} Siswa)</span>
+                  </button>
+                </div>
+              </div>
+            )}
 
             {/* LAST UPLOADED SUMMARY CARD */}
-            {lastUploadedInfo && (
-              <div className="mt-5 p-4 rounded-2xl bg-emerald-50/90 border-2 border-emerald-300 shadow-xs space-y-3 animate-in fade-in duration-300">
+            {lastUploadedInfo && !stagedPreview && (
+              <div className="p-4 rounded-2xl bg-emerald-50/90 border-2 border-emerald-300 shadow-xs space-y-3 animate-in fade-in duration-300">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-emerald-200 pb-3">
                   <div className="flex items-center gap-3">
                     <div className="w-10 h-10 rounded-xl bg-emerald-600 text-white flex items-center justify-center shrink-0">
@@ -882,11 +1064,11 @@ export const TeacherInputStudent: React.FC<TeacherInputStudentProps> = ({
                     </div>
                     <div>
                       <h4 className="text-sm font-bold text-slate-900 flex items-center gap-2">
-                        <span>File Berhasil Diimpor:</span>
+                        <span>File Terakhir Berhasil Diimpor:</span>
                         <span className="text-emerald-700 font-mono">{lastUploadedInfo.fileName}</span>
                       </h4>
                       <p className="text-xs text-slate-500">
-                        {lastUploadedInfo.fileSize} • Pukul {lastUploadedInfo.timestamp} • Total <strong>{lastUploadedInfo.count} siswa</strong> masuk ke database
+                        {lastUploadedInfo.fileSize} • Pukul {lastUploadedInfo.timestamp} • Total <strong>{lastUploadedInfo.count} siswa</strong> tersimpan ke database
                       </p>
                     </div>
                   </div>
@@ -896,11 +1078,11 @@ export const TeacherInputStudent: React.FC<TeacherInputStudentProps> = ({
                       <button
                         type="button"
                         onClick={handleUndoImport}
-                        className="px-3 py-1.5 bg-white hover:bg-slate-100 border border-slate-300 text-rose-700 hover:text-rose-800 font-bold text-xs rounded-lg transition-all flex items-center gap-1"
+                        className="px-3 py-1.5 bg-white hover:bg-slate-100 border border-slate-300 text-rose-700 hover:text-rose-800 font-bold text-xs rounded-lg transition-all flex items-center gap-1 shadow-2xs cursor-pointer"
                         title="Batalkan impor ini dan kembalikan data sebelumnya"
                       >
                         <RotateCcw className="w-3.5 h-3.5" />
-                        <span>Urungkan (Undo)</span>
+                        <span>Urungkan Impor (Undo)</span>
                       </button>
                     )}
                   </div>
@@ -1071,21 +1253,26 @@ export const TeacherInputStudent: React.FC<TeacherInputStudentProps> = ({
               </button>
 
               <button
+                type="button"
                 onClick={() => setConfirmClearClass(true)}
-                className="text-xs text-rose-600 hover:text-rose-700 font-semibold flex items-center gap-1 hover:underline px-2 py-1 cursor-pointer"
+                className="text-xs bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-300 font-bold px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-colors cursor-pointer"
+                title={`Hapus permanen seluruh siswa Kelas ${selectedClass} dari database`}
               >
-                <Trash2 className="w-3.5 h-3.5" />
-                <span>Kosongkan Kelas {selectedClass}</span>
+                <Trash2 className="w-3.5 h-3.5 text-rose-600" />
+                <span>Kosongkan Kelas {selectedClass} (Hapus Permanen)</span>
               </button>
             </div>
           )}
         </div>
 
         {currentClassStudents.length === 0 ? (
-          <div className="text-center py-10 bg-slate-50 rounded-xl border border-dashed border-slate-300">
-            <p className="text-sm font-semibold text-slate-600">Belum ada data siswa untuk Kelas {selectedClass}.</p>
-            <p className="text-xs text-slate-400 mt-1 max-w-sm mx-auto">
-              Unduh template Excel di atas, isi nama siswa, lalu klik <strong>Pilih & Upload File Siswa</strong> untuk memasukkan data secara massal.
+          <div className="text-center py-10 bg-slate-50 rounded-xl border border-dashed border-slate-300 space-y-2">
+            <div className="w-10 h-10 rounded-full bg-slate-100 text-slate-400 flex items-center justify-center mx-auto">
+              <Users className="w-5 h-5" />
+            </div>
+            <p className="text-sm font-bold text-slate-700">Kelas {selectedClass} Kosong (0 Siswa Terdaftar).</p>
+            <p className="text-xs text-slate-500 max-w-sm mx-auto">
+              Seluruh data siswa untuk kelas ini telah kosong. Anda dapat mengunggah file Excel/CSV melalui area upload di atas atau menambahkan siswa satu per satu.
             </p>
           </div>
         ) : (
@@ -1112,7 +1299,7 @@ export const TeacherInputStudent: React.FC<TeacherInputStudentProps> = ({
                     <td className="py-2.5 px-4 text-center">
                       <button
                         onClick={() => handleDeleteStudent(std.id)}
-                        title="Hapus Siswa"
+                        title="Hapus Siswa Permanen"
                         className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
                       >
                         <Trash2 className="w-4 h-4" />
@@ -1125,8 +1312,8 @@ export const TeacherInputStudent: React.FC<TeacherInputStudentProps> = ({
           </div>
         )}
 
-        {/* Class distribution pills at bottom of table */}
-        <div className="mt-4 pt-3 border-t border-slate-100 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs">
+        {/* Class distribution pills and bottom database management actions */}
+        <div className="mt-4 pt-3 border-t border-slate-100 flex flex-col lg:flex-row items-start lg:items-center justify-between gap-3 text-xs">
           <div className="flex items-center gap-1.5 flex-wrap">
             <span className="font-bold text-slate-600 mr-1">Rombel Terdaftar:</span>
             {['7A', '7B', '7C', '7D', '7E', '7F', '7G', '7H'].map((cls) => {
@@ -1152,15 +1339,29 @@ export const TeacherInputStudent: React.FC<TeacherInputStudentProps> = ({
             })}
           </div>
 
-          <button
-            type="button"
-            onClick={() => setConfirmResetAll(true)}
-            className="text-indigo-600 hover:text-indigo-800 font-bold hover:underline flex items-center gap-1 shrink-0 cursor-pointer"
-            title="Muat ulang 80 siswa unik untuk seluruh kelas 7A - 7H"
-          >
-            <Sparkles className="w-3.5 h-3.5 text-indigo-500" />
-            <span>Muat Master Lengkap (80 Siswa Unik 7A–7H)</span>
-          </button>
+          <div className="flex items-center gap-3 flex-wrap">
+            {studentsMaster.length > 0 && (
+              <button
+                type="button"
+                onClick={() => setConfirmClearAllClasses(true)}
+                className="text-rose-600 hover:text-rose-800 font-bold hover:underline flex items-center gap-1 shrink-0 cursor-pointer"
+                title="Hapus permanen seluruh data siswa dari semua rombel di database"
+              >
+                <Trash2 className="w-3.5 h-3.5 text-rose-500" />
+                <span>Kosongkan Semua Kelas ({studentsMaster.length} Siswa)</span>
+              </button>
+            )}
+
+            <button
+              type="button"
+              onClick={() => setConfirmResetAll(true)}
+              className="text-indigo-600 hover:text-indigo-800 font-bold hover:underline flex items-center gap-1 shrink-0 cursor-pointer"
+              title="Muat ulang 80 siswa unik untuk seluruh kelas 7A - 7H"
+            >
+              <Sparkles className="w-3.5 h-3.5 text-indigo-500" />
+              <span>Muat Master Contoh (80 Siswa 7A–7H)</span>
+            </button>
+          </div>
         </div>
       </div>
 
@@ -1195,7 +1396,7 @@ export const TeacherInputStudent: React.FC<TeacherInputStudentProps> = ({
         </div>
       )}
 
-      {/* Modal Konfirmasi Kosongkan Kelas */}
+      {/* Modal Konfirmasi Kosongkan Kelas Tunggal */}
       {confirmClearClass && (
         <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
           <div className="bg-white rounded-3xl p-6 max-w-sm w-full space-y-4 shadow-xl border border-slate-200">
@@ -1203,9 +1404,11 @@ export const TeacherInputStudent: React.FC<TeacherInputStudentProps> = ({
               <Trash2 className="w-6 h-6" />
             </div>
             <div className="text-center space-y-1">
-              <h3 className="text-base font-extrabold text-slate-800">Kosongkan Siswa Kelas {selectedClass}?</h3>
+              <h3 className="text-base font-extrabold text-slate-800">
+                Hapus Permanen Siswa Kelas {selectedClass}?
+              </h3>
               <p className="text-xs text-slate-500">
-                Tindakan ini akan menghapus seluruh data {currentClassStudents.length} siswa kelas {selectedClass}.
+                Tindakan ini akan menghapus permanen seluruh {currentClassStudents.length} siswa di Kelas {selectedClass} dari database browser. Data tidak akan kembali lagi saat aplikasi dimuat ulang.
               </p>
             </div>
             <div className="flex gap-2 pt-2">
@@ -1222,12 +1425,52 @@ export const TeacherInputStudent: React.FC<TeacherInputStudentProps> = ({
                   onSaveMaster(updated);
                   setStatusMessage({
                     type: 'success',
-                    text: `Data siswa kelas ${selectedClass} berhasil dikosongkan.`,
+                    text: `🗑️ Seluruh data siswa Kelas ${selectedClass} (${currentClassStudents.length} siswa) berhasil dihapus permanen dari database.`,
                   });
                 }}
                 className="flex-1 py-2.5 bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs rounded-xl shadow-xs transition-all cursor-pointer"
               >
-                Ya, Kosongkan
+                Ya, Hapus Permanen
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Konfirmasi Kosongkan Seluruh Database Siswa */}
+      {confirmClearAllClasses && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl p-6 max-w-sm w-full space-y-4 shadow-xl border border-slate-200">
+            <div className="w-12 h-12 rounded-2xl bg-rose-50 text-rose-600 flex items-center justify-center mx-auto">
+              <Trash2 className="w-6 h-6" />
+            </div>
+            <div className="text-center space-y-1">
+              <h3 className="text-base font-extrabold text-slate-800">
+                Kosongkan Seluruh Database Siswa?
+              </h3>
+              <p className="text-xs text-slate-500">
+                Tindakan ini akan menghapus permanen seluruh {studentsMaster.length} siswa dari semua rombel (7A s/d 7H). Database siswa akan menjadi kosong sepenuhnya dan data tidak akan kembali saat halaman dimuat ulang.
+              </p>
+            </div>
+            <div className="flex gap-2 pt-2">
+              <button
+                onClick={() => setConfirmClearAllClasses(false)}
+                className="flex-1 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl transition-all cursor-pointer"
+              >
+                Batal
+              </button>
+              <button
+                onClick={() => {
+                  setConfirmClearAllClasses(false);
+                  onSaveMaster([]);
+                  setStatusMessage({
+                    type: 'success',
+                    text: '🗑️ Seluruh database siswa berhasil dikosongkan permanen. Database kini bersih untuk data baru.',
+                  });
+                }}
+                className="flex-1 py-2.5 bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs rounded-xl shadow-xs transition-all cursor-pointer"
+              >
+                Ya, Kosongkan Semua
               </button>
             </div>
           </div>

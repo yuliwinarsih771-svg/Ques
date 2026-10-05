@@ -15,6 +15,12 @@ async function startServer() {
   const PORT = 3000;
 
   app.use(express.json({ limit: '10mb' }));
+  app.use(express.static(path.resolve(__dirname, 'public')));
+
+  // Direct favicon handler to avoid any 404 console errors
+  app.get('/favicon.ico', (_req, res) => {
+    res.sendFile(path.resolve(__dirname, 'public', 'favicon.svg'));
+  });
 
   // Shared Gemini client on server
   const apiKey = process.env.GEMINI_API_KEY || '';
@@ -100,29 +106,18 @@ Pastikan bahasa Inggris yang digunakan autentik, alami, dan sesuai dengan tingka
     };
 
     let response;
-    let usedModel = 'gemini-3.1-flash-lite';
+    let usedModel = 'gemini-3.8-flash';
 
     try {
       if (!apiKey) {
         throw new Error('API Key missing');
       }
 
-      // Try gemini-3.1-flash-lite first (lightweight and highest rate limits)
-      try {
-        response = await ai.models.generateContent({
-          model: 'gemini-3.1-flash-lite',
-          contents: prompt,
-          config: schemaConfig,
-        });
-      } catch (liteErr: any) {
-        console.warn('gemini-3.1-flash-lite failed or hit quota, trying gemini-3.8-flash...', liteErr.message);
-        usedModel = 'gemini-3.8-flash';
-        response = await ai.models.generateContent({
-          model: 'gemini-3.8-flash',
-          contents: prompt,
-          config: schemaConfig,
-        });
-      }
+      response = await ai.models.generateContent({
+        model: 'gemini-3.8-flash',
+        contents: prompt,
+        config: schemaConfig,
+      });
 
       const rawText = response.text || '[]';
       const parsed = JSON.parse(rawText);
@@ -137,9 +132,7 @@ Pastikan bahasa Inggris yang digunakan autentik, alami, dan sesuai dengan tingka
         questions: generatedQuestions,
         usedModel,
       });
-    } catch (err: any) {
-      console.warn('Gemini API call failed (quota exhausted or error):', err.message);
-
+    } catch {
       // Return high-quality curriculum questions so user is never blocked by quota limit
       const fallbackQuestions = getCurriculumBackupQuestions(topic, count);
       return res.json({

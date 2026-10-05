@@ -210,8 +210,7 @@ export const AiQuestionGenerator: React.FC<AiQuestionGeneratorProps> = ({
           });
         }
       } else {
-        // Fallback gracefully
-        console.warn('API returned fallback or error:', data.error);
+        // Fallback gracefully without console pollution
         const fallbackList = generateFallbackQuestions(activeTopic, questionCount);
         setGeneratedQuestions(fallbackList);
         setNotification({
@@ -219,8 +218,8 @@ export const AiQuestionGenerator: React.FC<AiQuestionGeneratorProps> = ({
           text: `Berhasil membuat ${fallbackList.length} butir soal berdasarkan kurikulum SMP (Mode Cadangan Kurikulum). Anda dapat mengedit butir soal di bawah.`,
         });
       }
-    } catch (err: any) {
-      console.warn('Error fetching AI questions, using offline curriculum generator:', err);
+    } catch {
+      // Fallback to curriculum offline generator
       const fallbackList = generateFallbackQuestions(activeTopic, questionCount);
       setGeneratedQuestions(fallbackList);
       setNotification({

@@ -8,6 +8,7 @@ import { ReviewModal } from './components/ReviewModal';
 import { TeacherPinModal } from './components/TeacherPinModal';
 import { TeacherDashboard } from './components/TeacherDashboard';
 import { ProcedureTextStudyModal } from './components/ProcedureTextStudyModal';
+import { MazeGameScreen } from './components/MazeGameScreen';
 import {
   StudentProfile,
   StudentSubmission,
@@ -16,6 +17,10 @@ import {
   QuizSettings,
   ProcedureTextItem,
   ViolationRecord,
+  MazeConfig,
+  MazeCompletionRecord,
+  KopSuratConfig,
+  DEFAULT_KOP_SURAT,
 } from './types';
 import {
   DEFAULT_QUESTIONS,
@@ -24,6 +29,7 @@ import {
   INITIAL_SUBMISSIONS,
   INITIAL_PROCEDURE_TEXTS,
 } from './data/quizData';
+import { DEFAULT_MAZE_CONFIG } from './data/mazeData';
 import { soundManager } from './utils/audio';
 
 const STORAGE_KEYS = {
@@ -35,6 +41,9 @@ const STORAGE_KEYS = {
   VIOLATIONS: 'quiz_violations_v2',
   STUDY_VIEWED: 'quiz_study_viewed_v2',
   TEACHER_PIN: 'quiz_teacher_pin_v2',
+  MAZE_CONFIG: 'eduquiz_maze_config',
+  MAZE_COMPLETIONS: 'quiz_maze_completions_v2',
+  KOP_SURAT: 'eduquiz_kop_surat',
 };
 
 // Helper to ensure each question in the question bank always has a guaranteed unique ID
@@ -64,8 +73,8 @@ const ensureUniqueQuestionIds = (qs: Question[]): Question[] => {
 };
 
 export default function App() {
-  // Screen state: 'start' | 'quiz' | 'result' | 'teacher'
-  const [currentScreen, setCurrentScreen] = useState<'start' | 'quiz' | 'result' | 'teacher'>('start');
+  // Screen state: 'start' | 'quiz' | 'result' | 'teacher' | 'maze'
+  const [currentScreen, setCurrentScreen] = useState<'start' | 'quiz' | 'result' | 'teacher' | 'maze'>('start');
 
   // Master states with localStorage persistence
   const [submissions, setSubmissions] = useState<StudentSubmission[]>(() => {
@@ -80,17 +89,9 @@ export default function App() {
   const [studentsMaster, setStudentsMaster] = useState<StudentMasterData[]>(() => {
     try {
       const saved = localStorage.getItem(STORAGE_KEYS.MASTER_STUDENTS);
-      if (saved) {
+      if (saved !== null) {
         const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          const existingClasses = new Set(parsed.map((s: StudentMasterData) => s.className));
-          // If classes like 7C, 7D, 7E, etc. are not yet in stored master, merge them automatically
-          const missingStudents = INITIAL_STUDENT_MASTER.filter((s) => !existingClasses.has(s.className));
-          if (missingStudents.length > 0) {
-            const merged = [...parsed, ...missingStudents];
-            localStorage.setItem(STORAGE_KEYS.MASTER_STUDENTS, JSON.stringify(merged));
-            return merged;
-          }
+        if (Array.isArray(parsed)) {
           return parsed;
         }
       }
@@ -142,6 +143,65 @@ export default function App() {
     }
   });
 
+  // Maze Game State & Completions
+  const [mazeConfig, setMazeConfig] = useState<MazeConfig>(() => {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEYS.MAZE_CONFIG);
+      return saved ? { ...DEFAULT_MAZE_CONFIG, ...JSON.parse(saved) } : DEFAULT_MAZE_CONFIG;
+    } catch {
+      return DEFAULT_MAZE_CONFIG;
+    }
+  });
+
+  const handleSaveMazeConfig = (newCfg: MazeConfig) => {
+    setMazeConfig(newCfg);
+    try {
+      localStorage.setItem(STORAGE_KEYS.MAZE_CONFIG, JSON.stringify(newCfg));
+    } catch {
+      // Ignore
+    }
+  };
+
+  const [mazeCompletions, setMazeCompletions] = useState<MazeCompletionRecord[]>(() => {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEYS.MAZE_COMPLETIONS);
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
+
+  const handleSaveMazeCompletion = (record: MazeCompletionRecord) => {
+    setMazeCompletions((prev) => [record, ...prev]);
+    try {
+      localStorage.setItem(STORAGE_KEYS.MAZE_COMPLETIONS, JSON.stringify([record, ...mazeCompletions]));
+    } catch {
+      // Ignore
+    }
+  };
+
+  const handleClearMazeCompletions = () => {
+    setMazeCompletions([]);
+    try {
+      localStorage.removeItem(STORAGE_KEYS.MAZE_COMPLETIONS);
+    } catch {
+      // Ignore
+    }
+  };
+
+  // Kop Surat for certificates
+  const [kopSurat, setKopSurat] = useState<KopSuratConfig>(() => {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEYS.KOP_SURAT);
+      if (saved) {
+        return { ...DEFAULT_KOP_SURAT, ...JSON.parse(saved) };
+      }
+    } catch {
+      // ignore
+    }
+    return DEFAULT_KOP_SURAT;
+  });
+
   // Current active session
   const [activeProfile, setActiveProfile] = useState<StudentProfile | null>(null);
   const [latestSubmission, setLatestSubmission] = useState<StudentSubmission | null>(null);
@@ -158,7 +218,22 @@ export default function App() {
     }
   });
 
-  const teacherPin = '1234';
+  const [teacherPin, setTeacherPin] = useState<string>(() => {
+    try {
+      return localStorage.getItem(STORAGE_KEYS.TEACHER_PIN) || '1234';
+    } catch {
+      return '1234';
+    }
+  });
+
+  const handleUpdateTeacherPin = (newPin: string) => {
+    setTeacherPin(newPin);
+    try {
+      localStorage.setItem(STORAGE_KEYS.TEACHER_PIN, newPin);
+    } catch {
+      // Ignore
+    }
+  };
 
   // Save to localStorage on change
   useEffect(() => {
@@ -290,7 +365,7 @@ export default function App() {
   };
 
   const isQuizActive = currentScreen === 'quiz';
-  const isDedicatedScreen = currentScreen === 'quiz' || currentScreen === 'teacher';
+  const isDedicatedScreen = currentScreen === 'quiz' || currentScreen === 'teacher' || currentScreen === 'maze';
 
   return (
     <div
@@ -298,11 +373,12 @@ export default function App() {
         isQuizActive ? 'h-dvh max-h-dvh overflow-hidden' : 'min-h-screen'
       }`}
     >
-      {/* Top Navbar: Hide during quiz & teacher dashboard to allow authentic full-screen layout */}
+      {/* Top Navbar: Hide during quiz, teacher dashboard & maze game for clean immersive layout */}
       {!isDedicatedScreen && (
         <Navbar
           onOpenTeacherPin={() => setIsPinModalOpen(true)}
           onOpenStudyModal={handleOpenStudyModal}
+          onOpenMazeGame={() => setCurrentScreen('maze')}
           isStudyLocked={hasViewedStudy}
         />
       )}
@@ -316,6 +392,10 @@ export default function App() {
             submissions={submissions}
             onStartQuiz={handleStartQuiz}
             onOpenStudyModal={handleOpenStudyModal}
+            onOpenMazeGame={(prof) => {
+              if (prof) setActiveProfile(prof);
+              setCurrentScreen('maze');
+            }}
             isStudyLocked={hasViewedStudy}
           />
         )}
@@ -353,12 +433,28 @@ export default function App() {
             settings={settings}
             procedureTexts={procedureTexts}
             violations={violations}
+            mazeConfig={mazeConfig}
+            onSaveMazeConfig={handleSaveMazeConfig}
+            mazeCompletions={mazeCompletions}
+            onClearMazeCompletions={handleClearMazeCompletions}
+            onOpenMazePlay={() => setCurrentScreen('maze')}
             onSaveSettings={setSettings}
             onSaveMaster={setStudentsMaster}
             onSaveQuestions={handleSaveQuestions}
             onDeleteSubmission={handleDeleteSubmission}
             onClearAllSubmissions={handleClearAllSubmissions}
             onClose={() => setCurrentScreen('start')}
+          />
+        )}
+
+        {currentScreen === 'maze' && (
+          <MazeGameScreen
+            studentProfile={activeProfile}
+            kopSurat={kopSurat}
+            onBackToHome={() => setCurrentScreen('start')}
+            onOpenTeacherPin={() => setIsPinModalOpen(true)}
+            initialGrade={mazeConfig.activeGrade}
+            onSaveCompletion={handleSaveMazeCompletion}
           />
         )}
       </main>
@@ -379,6 +475,7 @@ export default function App() {
           setIsPinModalOpen(false);
           setCurrentScreen('teacher');
         }}
+        onUpdatePin={handleUpdateTeacherPin}
       />
 
       {/* Review Modal */}

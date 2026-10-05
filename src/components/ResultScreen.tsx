@@ -1,6 +1,7 @@
 import React from 'react';
 import { Award, CheckCircle, XCircle, RotateCcw, BookOpen, Printer, Home, Clock, AlertTriangle } from 'lucide-react';
 import { StudentSubmission, Question } from '../types';
+import { printSingleStudentCertificate } from '../utils/printReport';
 
 interface ResultScreenProps {
   submission: StudentSubmission;
@@ -88,10 +89,11 @@ export const ResultScreen: React.FC<ResultScreenProps> = ({
           </button>
 
           <button
-            onClick={() => window.print()}
-            className="w-full py-2 sm:py-2.5 px-4 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl transition-all flex items-center justify-center gap-2"
+            onClick={() => printSingleStudentCertificate(submission, 75)}
+            className="w-full py-2 sm:py-2.5 px-4 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl transition-all flex items-center justify-center gap-2 cursor-pointer active:scale-98"
+            title="Cetak Lembar Nilai Siswa Format A4"
           >
-            <Printer className="w-4 h-4" />
+            <Printer className="w-4 h-4 text-indigo-600" />
             <span>Cetak Bukti Nilai (A4)</span>
           </button>
 

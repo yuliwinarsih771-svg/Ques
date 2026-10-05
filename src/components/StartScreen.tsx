@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Play, Sparkles, BookOpen, Clock, AlertTriangle, ShieldCheck, UserCheck, Lock } from 'lucide-react';
+import { Play, Sparkles, BookOpen, Clock, AlertTriangle, ShieldCheck, UserCheck, Lock, Gamepad2 } from 'lucide-react';
 import { QuizSettings, StudentProfile, StudentMasterData, StudentSubmission } from '../types';
 
 interface StartScreenProps {
@@ -8,6 +8,7 @@ interface StartScreenProps {
   submissions: StudentSubmission[];
   onStartQuiz: (profile: StudentProfile) => void;
   onOpenStudyModal: () => void;
+  onOpenMazeGame?: (profile?: StudentProfile) => void;
   isStudyLocked: boolean;
 }
 
@@ -17,6 +18,7 @@ export const StartScreen: React.FC<StartScreenProps> = ({
   submissions,
   onStartQuiz,
   onOpenStudyModal,
+  onOpenMazeGame,
   isStudyLocked,
 }) => {
   const defaultClass = React.useMemo(() => {
@@ -169,7 +171,7 @@ export const StartScreen: React.FC<StartScreenProps> = ({
           </div>
           <div className="flex items-center gap-1 font-medium">
             <UserCheck className="w-3.5 h-3.5 text-amber-600" />
-            <span>Batas: <strong>{settings.maxAttempts > 0 ? `${settings.maxAttempts}x` : 'Bebas'}</strong></span>
+            <span>Batas: <strong>{settings.maxAttempts > 0 ? `${settings.maxAttempts} Kali` : 'Bebas'}</strong></span>
           </div>
         </div>
 
@@ -325,10 +327,33 @@ export const StartScreen: React.FC<StartScreenProps> = ({
               ) : (
                 <>
                   <BookOpen className="w-3.5 h-3.5 text-indigo-600" />
-                  <span>Pelajari Dulu Modul Belajar (Batas 1x)</span>
+                  <span>Pelajari Dulu Modul Belajar Siswa</span>
                 </>
               )}
             </button>
+
+            {/* Educational Maze Game Launcher Button */}
+            {onOpenMazeGame && (
+              <button
+                type="button"
+                onClick={() =>
+                  onOpenMazeGame(
+                    name.trim()
+                      ? {
+                          name: name.trim(),
+                          className: selectedClass,
+                          attendanceNumber: attendanceNumber || 1,
+                        }
+                      : undefined
+                  )
+                }
+                className="w-full py-2.5 px-3 bg-gradient-to-r from-amber-500 to-indigo-600 hover:from-amber-600 hover:to-indigo-700 text-white font-extrabold text-[11px] sm:text-xs rounded-xl shadow-xs transition-all flex items-center justify-center gap-2 cursor-pointer active:scale-98"
+                title="Buka Permainan Labirin Bahasa Inggris SMP"
+              >
+                <Gamepad2 className="w-4 h-4 text-amber-200" />
+                <span>Petualangan Labirin Bahasa Inggris SMP (Game Edukasi)</span>
+              </button>
+            )}
           </div>
         </form>
       </div>

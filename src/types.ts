@@ -79,3 +79,122 @@ export interface ProcedureTextItem {
   languageFocus?: string[];
   audioScript?: string;
 }
+
+export interface KopSuratConfig {
+  instansiInduk: string;
+  dinasPendidikan: string;
+  namaSekolah: string;
+  alamatSekolah: string;
+  kontakSekolah: string;
+  judulLaporan: string;
+  subJudulLaporan: string;
+  mataPelajaran: string;
+  materiPokok: string;
+  tahunPelajaran: string;
+  semester: string;
+  kotaPenerbit: string;
+  jabatanPimpinan: string;
+  namaPimpinan: string;
+  nipPimpinan: string;
+  jabatanGuru: string;
+  namaGuru: string;
+  nipGuru: string;
+  logoUrl?: string;
+  showLogo: boolean;
+}
+
+export type SmpGradeLevel = '7' | '8' | '9' | 'all';
+
+export interface MazeQuestion {
+  id: string;
+  grade: '7' | '8' | '9';
+  topic: string;
+  question: string;
+  options: string[];
+  correctAnswer: number;
+  explanation: string;
+  vocabularyFocus?: string;
+}
+
+export interface MazeCheckpoint {
+  id: string;
+  x: number;
+  y: number;
+  question: MazeQuestion;
+  isUnlocked: boolean;
+}
+
+export interface MazeGem {
+  id: string;
+  x: number;
+  y: number;
+  word: string;
+  meaning: string;
+  collected: boolean;
+}
+
+export type MazePowerUpType = 'speed' | 'torch' | 'shield';
+
+export interface MazePowerUp {
+  id: string;
+  x: number;
+  y: number;
+  type: MazePowerUpType;
+  collected: boolean;
+}
+
+export type MazeTheme = 'castle' | 'forest' | 'cyber';
+
+export interface MazeAvatar {
+  id: string;
+  name: string;
+  emoji: string;
+  badge: string;
+  color: string;
+}
+
+export interface MazeConfig {
+  activeGrade: SmpGradeLevel;
+  difficulty: 'easy' | 'medium' | 'hard';
+  gridSize: number; // 11, 15, or 19
+  allowStudentGradeChange: boolean;
+  timeLimitSeconds: number; // 0 for unlimited, or e.g. 180, 300
+}
+
+export interface MazeCompletionRecord {
+  id: string;
+  studentName: string;
+  className: string;
+  attendanceNumber: number;
+  gradePlayed: '7' | '8' | '9';
+  difficulty: string;
+  timeSpentSeconds: number;
+  starsCount: number;
+  score: number;
+  gatesCleared: number;
+  totalGates: number;
+  completedAt: string;
+}
+
+export const DEFAULT_KOP_SURAT: KopSuratConfig = {
+  instansiInduk: 'PEMERINTAH DAERAH DINAS PENDIDIKAN',
+  dinasPendidikan: 'DINAS PENDIDIKAN DAN KEBUDAYAAN',
+  namaSekolah: 'SMP NEGERI INDONESIA',
+  alamatSekolah: 'Jl. Pendidikan Nasional No. 123, Indonesia',
+  kontakSekolah: 'Telp: (021) 7890123 • Email: info@smpindonesia.sch.id',
+  judulLaporan: 'REKAPITULASI HASIL ASESMEN NILAI SISWA',
+  subJudulLaporan: 'Kuis & Asesmen Interaktif Berbasis Komputer • Kurikulum Merdeka',
+  mataPelajaran: 'Bahasa Inggris',
+  materiPokok: 'Chapter 1 (Introducing myself and others) & Chapter 2 (Culinary and Me)',
+  tahunPelajaran: '2026/2027',
+  semester: 'Ganjil',
+  kotaPenerbit: 'Jakarta',
+  jabatanPimpinan: 'Kepala Sekolah / Wali Kelas',
+  namaPimpinan: '( ............................................................ )',
+  nipPimpinan: '...........................................................',
+  jabatanGuru: 'Guru Mata Pelajaran Bahasa Inggris',
+  namaGuru: 'Eli Ermawati, S.Pd.',
+  nipGuru: '...........................................................',
+  showLogo: true,
+  logoUrl: '',
+};
