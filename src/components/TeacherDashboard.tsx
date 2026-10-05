@@ -67,6 +67,7 @@ interface TeacherDashboardProps {
   mazeCompletions?: MazeCompletionRecord[];
   onClearMazeCompletions?: () => void;
   onOpenMazePlay?: () => void;
+  onOpenSnakeLadderPlay?: () => void;
   onSaveSettings: (settings: QuizSettings) => void;
   onSaveMaster: (students: StudentMasterData[]) => void;
   onSaveQuestions: (questions: Question[]) => void;
@@ -87,6 +88,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
   mazeCompletions = [],
   onClearMazeCompletions,
   onOpenMazePlay,
+  onOpenSnakeLadderPlay,
   onSaveSettings,
   onSaveMaster,
   onSaveQuestions,
@@ -1011,16 +1013,28 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
               </p>
             </div>
 
-            {onOpenMazePlay && (
-              <button
-                type="button"
-                onClick={onOpenMazePlay}
-                className="px-4 py-2 bg-gradient-to-r from-amber-500 to-indigo-600 hover:from-amber-600 hover:to-indigo-700 text-white font-extrabold text-xs rounded-xl shadow-md transition-all flex items-center gap-1.5 cursor-pointer active:scale-95"
-              >
-                <Gamepad2 className="w-4 h-4 text-amber-200" />
-                <span>Uji Coba Main Labirin (Mode Guru)</span>
-              </button>
-            )}
+            <div className="flex items-center gap-2">
+              {onOpenSnakeLadderPlay && (
+                <button
+                  type="button"
+                  onClick={onOpenSnakeLadderPlay}
+                  className="px-3.5 py-2 bg-gradient-to-r from-teal-500 to-emerald-600 hover:from-teal-600 hover:to-emerald-700 text-slate-950 font-extrabold text-xs rounded-xl shadow-md transition-all flex items-center gap-1.5 cursor-pointer active:scale-95"
+                >
+                  <span>🎲 Main Ular Tangga</span>
+                </button>
+              )}
+
+              {onOpenMazePlay && (
+                <button
+                  type="button"
+                  onClick={onOpenMazePlay}
+                  className="px-3.5 py-2 bg-gradient-to-r from-amber-500 to-indigo-600 hover:from-amber-600 hover:to-indigo-700 text-white font-extrabold text-xs rounded-xl shadow-md transition-all flex items-center gap-1.5 cursor-pointer active:scale-95"
+                >
+                  <Gamepad2 className="w-4 h-4 text-amber-200" />
+                  <span>Main Labirin</span>
+                </button>
+              )}
+            </div>
           </div>
 
           {/* Setting 1: Grade Level Selection Cards */}

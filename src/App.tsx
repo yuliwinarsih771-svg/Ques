@@ -9,6 +9,7 @@ import { TeacherPinModal } from './components/TeacherPinModal';
 import { TeacherDashboard } from './components/TeacherDashboard';
 import { ProcedureTextStudyModal } from './components/ProcedureTextStudyModal';
 import { MazeGameScreen } from './components/MazeGameScreen';
+import { SnakeLadderGameScreen } from './components/SnakeLadderGameScreen';
 import {
   StudentProfile,
   StudentSubmission,
@@ -19,6 +20,7 @@ import {
   ViolationRecord,
   MazeConfig,
   MazeCompletionRecord,
+  SnakeLadderRecord,
   KopSuratConfig,
   DEFAULT_KOP_SURAT,
 } from './types';
@@ -43,6 +45,7 @@ const STORAGE_KEYS = {
   TEACHER_PIN: 'quiz_teacher_pin_v2',
   MAZE_CONFIG: 'eduquiz_maze_config',
   MAZE_COMPLETIONS: 'quiz_maze_completions_v2',
+  SNAKE_LADDER_RECORDS: 'quiz_snake_ladder_records_v2',
   KOP_SURAT: 'eduquiz_kop_surat',
 };
 
@@ -73,8 +76,8 @@ const ensureUniqueQuestionIds = (qs: Question[]): Question[] => {
 };
 
 export default function App() {
-  // Screen state: 'start' | 'quiz' | 'result' | 'teacher' | 'maze'
-  const [currentScreen, setCurrentScreen] = useState<'start' | 'quiz' | 'result' | 'teacher' | 'maze'>('start');
+  // Screen state: 'start' | 'quiz' | 'result' | 'teacher' | 'maze' | 'snake_ladder'
+  const [currentScreen, setCurrentScreen] = useState<'start' | 'quiz' | 'result' | 'teacher' | 'maze' | 'snake_ladder'>('start');
 
   // Master states with localStorage persistence
   const [submissions, setSubmissions] = useState<StudentSubmission[]>(() => {
@@ -184,6 +187,34 @@ export default function App() {
     setMazeCompletions([]);
     try {
       localStorage.removeItem(STORAGE_KEYS.MAZE_COMPLETIONS);
+    } catch {
+      // Ignore
+    }
+  };
+
+  // Snakes & Ladders Game Records
+  const [snakeLadderRecords, setSnakeLadderRecords] = useState<SnakeLadderRecord[]>(() => {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEYS.SNAKE_LADDER_RECORDS);
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
+
+  const handleSaveSnakeLadderRecord = (rec: SnakeLadderRecord) => {
+    setSnakeLadderRecords((prev) => [rec, ...prev]);
+    try {
+      localStorage.setItem(STORAGE_KEYS.SNAKE_LADDER_RECORDS, JSON.stringify([rec, ...snakeLadderRecords]));
+    } catch {
+      // Ignore
+    }
+  };
+
+  const handleClearSnakeLadderRecords = () => {
+    setSnakeLadderRecords([]);
+    try {
+      localStorage.removeItem(STORAGE_KEYS.SNAKE_LADDER_RECORDS);
     } catch {
       // Ignore
     }
@@ -365,7 +396,11 @@ export default function App() {
   };
 
   const isQuizActive = currentScreen === 'quiz';
-  const isDedicatedScreen = currentScreen === 'quiz' || currentScreen === 'teacher' || currentScreen === 'maze';
+  const isDedicatedScreen =
+    currentScreen === 'quiz' ||
+    currentScreen === 'teacher' ||
+    currentScreen === 'maze' ||
+    currentScreen === 'snake_ladder';
 
   return (
     <div
@@ -373,12 +408,13 @@ export default function App() {
         isQuizActive ? 'h-dvh max-h-dvh overflow-hidden' : 'min-h-screen'
       }`}
     >
-      {/* Top Navbar: Hide during quiz, teacher dashboard & maze game for clean immersive layout */}
+      {/* Top Navbar: Hide during quiz, teacher dashboard & games for clean immersive layout */}
       {!isDedicatedScreen && (
         <Navbar
           onOpenTeacherPin={() => setIsPinModalOpen(true)}
           onOpenStudyModal={handleOpenStudyModal}
           onOpenMazeGame={() => setCurrentScreen('maze')}
+          onOpenSnakeLadder={() => setCurrentScreen('snake_ladder')}
           isStudyLocked={hasViewedStudy}
         />
       )}
@@ -395,6 +431,10 @@ export default function App() {
             onOpenMazeGame={(prof) => {
               if (prof) setActiveProfile(prof);
               setCurrentScreen('maze');
+            }}
+            onOpenSnakeLadder={(prof) => {
+              if (prof) setActiveProfile(prof);
+              setCurrentScreen('snake_ladder');
             }}
             isStudyLocked={hasViewedStudy}
           />
@@ -438,6 +478,7 @@ export default function App() {
             mazeCompletions={mazeCompletions}
             onClearMazeCompletions={handleClearMazeCompletions}
             onOpenMazePlay={() => setCurrentScreen('maze')}
+            onOpenSnakeLadderPlay={() => setCurrentScreen('snake_ladder')}
             onSaveSettings={setSettings}
             onSaveMaster={setStudentsMaster}
             onSaveQuestions={handleSaveQuestions}
@@ -455,6 +496,17 @@ export default function App() {
             onOpenTeacherPin={() => setIsPinModalOpen(true)}
             initialGrade={mazeConfig.activeGrade}
             onSaveCompletion={handleSaveMazeCompletion}
+          />
+        )}
+
+        {currentScreen === 'snake_ladder' && (
+          <SnakeLadderGameScreen
+            studentProfile={activeProfile}
+            kopSurat={kopSurat}
+            onBackToHome={() => setCurrentScreen('start')}
+            onOpenTeacherPin={() => setIsPinModalOpen(true)}
+            initialGrade={mazeConfig.activeGrade}
+            onSaveRecord={handleSaveSnakeLadderRecord}
           />
         )}
       </main>

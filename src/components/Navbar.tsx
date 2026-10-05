@@ -1,10 +1,11 @@
 import React from 'react';
-import { BookOpen, GraduationCap, Shield, Gamepad2 } from 'lucide-react';
+import { BookOpen, GraduationCap, Shield, Gamepad2, Dice6 } from 'lucide-react';
 
 interface NavbarProps {
   onOpenTeacherPin: () => void;
   onOpenStudyModal: () => void;
   onOpenMazeGame?: () => void;
+  onOpenSnakeLadder?: () => void;
   isStudyLocked?: boolean;
 }
 
@@ -12,6 +13,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   onOpenTeacherPin,
   onOpenStudyModal,
   onOpenMazeGame,
+  onOpenSnakeLadder,
   isStudyLocked = false,
 }) => {
   return (
@@ -35,6 +37,19 @@ export const Navbar: React.FC<NavbarProps> = ({
 
           {/* Action buttons */}
           <div className="flex items-center gap-1.5 sm:gap-2.5">
+            {onOpenSnakeLadder && (
+              <button
+                type="button"
+                onClick={onOpenSnakeLadder}
+                className="inline-flex items-center gap-1.5 px-2.5 py-1 sm:px-3 sm:py-1.5 text-[11px] sm:text-xs font-extrabold text-teal-900 bg-teal-50 hover:bg-teal-100 border border-teal-300 rounded-xl shadow-xs transition-all active:scale-95 cursor-pointer"
+                title="Mainkan Game Ular Tangga Edukasi Bahasa Inggris SMP"
+              >
+                <Dice6 className="w-3.5 h-3.5 text-teal-600" />
+                <span className="hidden sm:inline">Ular Tangga</span>
+                <span className="sm:hidden">Ular Tangga</span>
+              </button>
+            )}
+
             {onOpenMazeGame && (
               <button
                 type="button"
@@ -43,7 +58,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                 title="Mainkan Game Labirin Edukasi Bahasa Inggris SMP"
               >
                 <Gamepad2 className="w-3.5 h-3.5 text-amber-600" />
-                <span className="hidden sm:inline">Game Labirin SMP</span>
+                <span className="hidden sm:inline">Labirin SMP</span>
                 <span className="sm:hidden">Labirin</span>
               </button>
             )}

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Play, Sparkles, BookOpen, Clock, AlertTriangle, ShieldCheck, UserCheck, Lock, Gamepad2 } from 'lucide-react';
+import { Play, Sparkles, BookOpen, Clock, AlertTriangle, ShieldCheck, UserCheck, Lock, Gamepad2, Dice6 } from 'lucide-react';
 import { QuizSettings, StudentProfile, StudentMasterData, StudentSubmission } from '../types';
 
 interface StartScreenProps {
@@ -9,6 +9,7 @@ interface StartScreenProps {
   onStartQuiz: (profile: StudentProfile) => void;
   onOpenStudyModal: () => void;
   onOpenMazeGame?: (profile?: StudentProfile) => void;
+  onOpenSnakeLadder?: (profile?: StudentProfile) => void;
   isStudyLocked: boolean;
 }
 
@@ -19,6 +20,7 @@ export const StartScreen: React.FC<StartScreenProps> = ({
   onStartQuiz,
   onOpenStudyModal,
   onOpenMazeGame,
+  onOpenSnakeLadder,
   isStudyLocked,
 }) => {
   const defaultClass = React.useMemo(() => {
@@ -352,6 +354,29 @@ export const StartScreen: React.FC<StartScreenProps> = ({
               >
                 <Gamepad2 className="w-4 h-4 text-amber-200" />
                 <span>Petualangan Labirin Bahasa Inggris SMP (Game Edukasi)</span>
+              </button>
+            )}
+
+            {/* Educational Snake and Ladder Game Launcher Button */}
+            {onOpenSnakeLadder && (
+              <button
+                type="button"
+                onClick={() =>
+                  onOpenSnakeLadder(
+                    name.trim()
+                      ? {
+                          name: name.trim(),
+                          className: selectedClass,
+                          attendanceNumber: attendanceNumber || 1,
+                        }
+                      : undefined
+                  )
+                }
+                className="w-full py-2.5 px-3 bg-gradient-to-r from-teal-500 via-emerald-500 to-blue-600 hover:from-teal-600 hover:to-blue-700 text-white font-extrabold text-[11px] sm:text-xs rounded-xl shadow-xs transition-all flex items-center justify-center gap-2 cursor-pointer active:scale-98"
+                title="Buka Permainan Ular Tangga Bahasa Inggris SMP"
+              >
+                <Dice6 className="w-4 h-4 text-teal-200" />
+                <span>Main Ular Tangga Edukasi SMP (100 Petak Tantangan)</span>
               </button>
             )}
           </div>

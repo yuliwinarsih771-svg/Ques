@@ -176,6 +176,40 @@ export interface MazeCompletionRecord {
   completedAt: string;
 }
 
+// ================= SNAKES AND LADDERS TYPES =================
+export interface SnakeLadderPlayer {
+  id: string;
+  name: string;
+  className: string;
+  avatar: string; // Emoji e.g. 🦁, 🐱, 🚀, 🦉
+  color: string; // Tailwind color class
+  position: number; // 1 to 100
+  isBot: boolean;
+  questionsAnswered: number;
+  correctAnswers: number;
+  score: number;
+  rank?: number;
+}
+
+export interface SnakeLadderConfig {
+  activeGrade: SmpGradeLevel;
+  mode: 'solo' | 'multiplayer'; // Solo vs AI or Pass & Play with friends
+  totalPlayers: number; // 2, 3, or 4
+  requireCorrectToClimb: boolean; // Must answer English question to take ladder
+  snakeShieldOnCorrect: boolean; // Correct answer shields from snake bite
+}
+
+export interface SnakeLadderRecord {
+  id: string;
+  winnerName: string;
+  className: string;
+  gradePlayed: SmpGradeLevel;
+  playersCount: number;
+  roundsCount: number;
+  winningScore: number;
+  completedAt: string;
+}
+
 export const DEFAULT_KOP_SURAT: KopSuratConfig = {
   instansiInduk: 'PEMERINTAH DAERAH DINAS PENDIDIKAN',
   dinasPendidikan: 'DINAS PENDIDIKAN DAN KEBUDAYAAN',
