@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import confetti from 'canvas-confetti';
 import {
   Gamepad2,
@@ -17,17 +17,11 @@ import {
   CheckCircle2,
   XCircle,
   Printer,
-  ChevronRight,
   Shield,
   Zap,
-  Dice1,
-  Dice2,
-  Dice3,
-  Dice4,
-  Dice5,
-  Dice6,
   Star,
   Settings,
+  Flame,
 } from 'lucide-react';
 import {
   SnakeLadderPlayer,
@@ -90,13 +84,20 @@ export const SnakeLadderGameScreen: React.FC<SnakeLadderGameScreenProps> = ({
   const [player4Name, setPlayer4Name] = useState('Siswa 4');
   const [player4Avatar, setPlayer4Avatar] = useState(PLAYER_AVATARS[3]);
 
-  // In-Game Players
+  // In-Game Players State
   const [players, setPlayers] = useState<SnakeLadderPlayer[]>([]);
   const [currentPlayerIndex, setCurrentPlayerIndex] = useState(0);
 
-  // Dice state
+  // Synchronized refs to prevent asynchronous closure staleness
+  const playersRef = useRef<SnakeLadderPlayer[]>([]);
+  playersRef.current = players;
+  const currentPlayerIndexRef = useRef<number>(0);
+  currentPlayerIndexRef.current = currentPlayerIndex;
+
+  // Dice & Moving States
   const [diceNumber, setDiceNumber] = useState<number>(1);
   const [isRolling, setIsRolling] = useState(false);
+  const [isMoving, setIsMoving] = useState(false);
   const [hasBonusRoll, setHasBonusRoll] = useState(false);
   const [roundsCount, setRoundsCount] = useState(1);
 
@@ -118,7 +119,7 @@ export const SnakeLadderGameScreen: React.FC<SnakeLadderGameScreenProps> = ({
   // Sounds & Audio
   const [isSoundMuted, setIsSoundMuted] = useState(false);
 
-  // Recent Event Toast
+  // Event Toast
   const [eventToast, setEventToast] = useState<{ text: string; type: 'ladder' | 'snake' | 'bonus' | 'six' } | null>(null);
 
   // Winner
@@ -209,9 +210,12 @@ export const SnakeLadderGameScreen: React.FC<SnakeLadderGameScreenProps> = ({
     }
 
     setPlayers(list);
+    playersRef.current = list;
     setCurrentPlayerIndex(0);
+    currentPlayerIndexRef.current = 0;
     setDiceNumber(1);
     setIsRolling(false);
+    setIsMoving(false);
     setHasBonusRoll(false);
     setRoundsCount(1);
     setWinner(null);
@@ -221,335 +225,80 @@ export const SnakeLadderGameScreen: React.FC<SnakeLadderGameScreenProps> = ({
     if (!isSoundMuted) soundManager.playSuccessSound();
   };
 
-  // Roll Dice Logic
-  const handleRollDice = () => {
-    if (isRolling || activeQuestion !== null || gameState !== 'playing') return;
-
-    setIsRolling(true);
-    if (!isSoundMuted) soundManager.playKeyClick();
-
-    // Dice roll animation ticks
-    let ticks = 0;
-    const interval = setInterval(() => {
-      ticks++;
-      setDiceNumber(Math.floor(Math.random() * 6) + 1);
-
-      if (ticks >= 10) {
-        clearInterval(interval);
-        const finalRoll = Math.floor(Math.random() * 6) + 1;
-        setDiceNumber(finalRoll);
-        setIsRolling(false);
-
-        // Process Move
-        processPlayerMove(finalRoll);
-      }
-    }, 60);
-  };
-
-  // Process Move Step by Step
-  const processPlayerMove = (roll: number) => {
-    const curPlayer = players[currentPlayerIndex];
-    if (!curPlayer) return;
-
-    const startPos = curPlayer.position;
-    let targetPos = startPos + roll;
-
-    // Check bounce if exceeds 100
-    if (targetPos > 100) {
-      const excess = targetPos - 100;
-      targetPos = 100 - excess;
-    }
-
-    // Step-by-step animation
-    let currentStep = startPos;
-    const stepInterval = setInterval(() => {
-      if (currentStep < targetPos) {
-        currentStep++;
-      } else if (currentStep > targetPos) {
-        currentStep--;
-      }
-
-      setPlayers((prev) =>
-        prev.map((p, idx) => (idx === currentPlayerIndex ? { ...p, position: currentStep } : p))
-      );
-
-      if (!isSoundMuted) soundManager.playKeyClick();
-
-      if (currentStep === targetPos) {
-        clearInterval(stepInterval);
-        // Arrived at targetPos, evaluate tile interactions
-        evaluateTileArrival(targetPos, roll);
-      }
-    }, 120);
-  };
-
-  // Evaluate tile arrival: Ladders, Snakes, Questions, or Victory
-  const evaluateTileArrival = (pos: number, roll: number) => {
-    const curPlayer = players[currentPlayerIndex];
-
-    // Check Victory 100
-    if (pos === 100) {
-      handleGameVictory(curPlayer);
+  // Turn management: Advance to next player
+  const advanceTurn = useCallback((bonusRollAllowed: boolean = false) => {
+    if (bonusRollAllowed) {
+      // The current player gets another turn (e.g. rolled a 6)
       return;
     }
 
-    // Check Bonus Roll on 6
-    const gotSix = roll === 6;
-    if (gotSix) {
-      setHasBonusRoll(true);
-      setEventToast({
-        text: `DAPAT ANGKA 6! ${curPlayer.name} mendapat bonus lempar dadu sekali lagi! 🎲`,
-        type: 'six',
-      });
-      setTimeout(() => setEventToast(null), 3000);
-    } else {
-      setHasBonusRoll(false);
-    }
-
-    // Check Ladder 🪜
-    if (LADDERS_MAP[pos]) {
-      const topPos = LADDERS_MAP[pos];
-      if (config.requireCorrectToClimb && !curPlayer.isBot) {
-        // Trigger English Question to climb!
-        const q = getSnakeLadderQuestion(config.activeGrade, usedQuestionsRef.current);
-        usedQuestionsRef.current.add(q.id);
-
-        setActiveQuestion({
-          question: q,
-          purpose: 'ladder',
-          targetTile: topPos,
-          playerIndex: currentPlayerIndex,
-        });
-        setSelectedOption(null);
-        setQuestionFeedback(null);
-        return;
-      } else {
-        // Direct climb (or bot)
-        climbLadderDirect(topPos);
-        return;
-      }
-    }
-
-    // Check Snake 🐍
-    if (SNAKES_MAP[pos]) {
-      const tailPos = SNAKES_MAP[pos];
-      if (config.snakeShieldOnCorrect && !curPlayer.isBot) {
-        // Trigger English Question for Shield!
-        const q = getSnakeLadderQuestion(config.activeGrade, usedQuestionsRef.current);
-        usedQuestionsRef.current.add(q.id);
-
-        setActiveQuestion({
-          question: q,
-          purpose: 'snake',
-          targetTile: tailPos,
-          playerIndex: currentPlayerIndex,
-        });
-        setSelectedOption(null);
-        setQuestionFeedback(null);
-        return;
-      } else {
-        // Slide down
-        slideDownSnakeDirect(tailPos);
-        return;
-      }
-    }
-
-    // Check Dedicated Question Tile ⭐
-    if (QUESTION_TILES.has(pos) && !curPlayer.isBot) {
-      const q = getSnakeLadderQuestion(config.activeGrade, usedQuestionsRef.current);
-      usedQuestionsRef.current.add(q.id);
-
-      setActiveQuestion({
-        question: q,
-        purpose: 'bonus',
-        targetTile: pos,
-        playerIndex: currentPlayerIndex,
-      });
-      setSelectedOption(null);
-      setQuestionFeedback(null);
-      return;
-    }
-
-    // Normal tile: Next turn
-    finishTurn(gotSix);
-  };
-
-  // Direct climb ladder
-  const climbLadderDirect = (topPos: number) => {
-    if (!isSoundMuted) soundManager.playPowerUpSound();
-    setEventToast({
-      text: `HEBAT! Menemukan Tangga Emas! Naik ke Petak ${topPos} 🪜`,
-      type: 'ladder',
-    });
-    setTimeout(() => setEventToast(null), 3000);
-
-    setPlayers((prev) =>
-      prev.map((p, idx) =>
-        idx === currentPlayerIndex ? { ...p, position: topPos, score: p.score + 100 } : p
-      )
-    );
-
-    if (topPos === 100) {
-      handleGameVictory(players[currentPlayerIndex]);
-    } else {
-      finishTurn(hasBonusRoll);
-    }
-  };
-
-  // Direct slide snake
-  const slideDownSnakeDirect = (tailPos: number) => {
-    if (!isSoundMuted) soundManager.playErrorSound();
-    setEventToast({
-      text: `YAH! Terinjak Kepala Ular! Meluncur turun ke Petak ${tailPos} 🐍`,
-      type: 'snake',
-    });
-    setTimeout(() => setEventToast(null), 3000);
-
-    setPlayers((prev) =>
-      prev.map((p, idx) => (idx === currentPlayerIndex ? { ...p, position: tailPos } : p))
-    );
-
-    finishTurn(hasBonusRoll);
-  };
-
-  // Finish Turn & Pass to Next Player
-  const finishTurn = (gotBonusRoll: boolean) => {
-    if (gotBonusRoll) {
-      // Same player rolls again
-      return;
-    }
-
-    const nextIndex = (currentPlayerIndex + 1) % players.length;
-    if (nextIndex === 0) {
+    setHasBonusRoll(false);
+    const totalP = playersRef.current.length;
+    const nextIdx = (currentPlayerIndexRef.current + 1) % totalP;
+    if (nextIdx === 0) {
       setRoundsCount((prev) => prev + 1);
     }
-    setCurrentPlayerIndex(nextIndex);
+    setCurrentPlayerIndex(nextIdx);
+    currentPlayerIndexRef.current = nextIdx;
+  }, []);
 
-    // If next player is bot, trigger bot auto roll after short delay
-    const nextPlayer = players[nextIndex];
-    if (nextPlayer && nextPlayer.isBot) {
-      setTimeout(() => {
-        handleRollDice();
-      }, 1200);
-    }
-  };
+  // Direct climb ladder
+  const climbLadderDirect = useCallback(
+    (playerIdx: number, topPos: number, bonusRollActive: boolean) => {
+      if (!isSoundMuted) soundManager.playPowerUpSound();
+      setEventToast({
+        text: `HEBAT! Menemukan Tangga Emas! Naik ke Petak ${topPos} 🪜`,
+        type: 'ladder',
+      });
+      setTimeout(() => setEventToast(null), 3000);
 
-  // Answer English Challenge Question
-  const handleAnswerQuestion = () => {
-    if (selectedOption === null || !activeQuestion) return;
+      setPlayers((prev) => {
+        const next = prev.map((p, idx) =>
+          idx === playerIdx ? { ...p, position: topPos, score: p.score + 100 } : p
+        );
+        playersRef.current = next;
+        return next;
+      });
 
-    const q = activeQuestion.question;
-    const isCorrect = selectedOption === q.correctAnswer;
-    const pIdx = activeQuestion.playerIndex;
-
-    // Update player question stats
-    setPlayers((prev) =>
-      prev.map((p, idx) =>
-        idx === pIdx
-          ? {
-              ...p,
-              questionsAnswered: p.questionsAnswered + 1,
-              correctAnswers: p.correctAnswers + (isCorrect ? 1 : 0),
-              score: p.score + (isCorrect ? 100 : 0),
-            }
-          : p
-      )
-    );
-
-    if (isCorrect) {
-      if (!isSoundMuted) soundManager.playSuccessSound();
-
-      if (activeQuestion.purpose === 'ladder') {
-        setQuestionFeedback({
-          isCorrect: true,
-          text: `Jawaban Tepat! Anda berhak menaiki tangga emas ke petak ${activeQuestion.targetTile}! 🪜`,
-          explanation: q.explanation,
-        });
-
-        setTimeout(() => {
-          climbLadderDirect(activeQuestion.targetTile);
-          setActiveQuestion(null);
-          setQuestionFeedback(null);
-          setSelectedOption(null);
-        }, 1600);
-      } else if (activeQuestion.purpose === 'snake') {
-        setQuestionFeedback({
-          isCorrect: true,
-          text: 'Jawaban Tepat! Perisai Tata Bahasa Melindungi Anda dari Gigitan Ular! Tetap aman di petak ini! 🛡️',
-          explanation: q.explanation,
-        });
-
-        setTimeout(() => {
-          setActiveQuestion(null);
-          setQuestionFeedback(null);
-          setSelectedOption(null);
-          finishTurn(hasBonusRoll);
-        }, 1600);
+      if (topPos >= 100) {
+        const targetP = playersRef.current[playerIdx];
+        if (targetP) handleGameVictory(targetP);
       } else {
-        // Bonus question tile
-        setQuestionFeedback({
-          isCorrect: true,
-          text: 'Jawaban Tepat! Anda mendapatkan bonus +100 XP! ⭐',
-          explanation: q.explanation,
-        });
-
-        setTimeout(() => {
-          setActiveQuestion(null);
-          setQuestionFeedback(null);
-          setSelectedOption(null);
-          finishTurn(hasBonusRoll);
-        }, 1600);
+        advanceTurn(bonusRollActive);
       }
-    } else {
+    },
+    [advanceTurn, isSoundMuted]
+  );
+
+  // Direct slide snake
+  const slideDownSnakeDirect = useCallback(
+    (playerIdx: number, tailPos: number, bonusRollActive: boolean) => {
       if (!isSoundMuted) soundManager.playErrorSound();
+      setEventToast({
+        text: `YAH! Terinjak Kepala Ular! Meluncur turun ke Petak ${tailPos} 🐍`,
+        type: 'snake',
+      });
+      setTimeout(() => setEventToast(null), 3000);
 
-      if (activeQuestion.purpose === 'ladder') {
-        setQuestionFeedback({
-          isCorrect: false,
-          text: 'Jawaban Belum Tepat. Belum berhasil menaiki tangga, tetap di petak saat ini.',
-          explanation: q.explanation,
-        });
+      setPlayers((prev) => {
+        const next = prev.map((p, idx) =>
+          idx === playerIdx ? { ...p, position: tailPos } : p
+        );
+        playersRef.current = next;
+        return next;
+      });
 
-        setTimeout(() => {
-          setActiveQuestion(null);
-          setQuestionFeedback(null);
-          setSelectedOption(null);
-          finishTurn(hasBonusRoll);
-        }, 2200);
-      } else if (activeQuestion.purpose === 'snake') {
-        setQuestionFeedback({
-          isCorrect: false,
-          text: `Jawaban Belum Tepat. Tergelincir meluncur turun ke petak ${activeQuestion.targetTile}! 🐍`,
-          explanation: q.explanation,
-        });
-
-        setTimeout(() => {
-          slideDownSnakeDirect(activeQuestion.targetTile);
-          setActiveQuestion(null);
-          setQuestionFeedback(null);
-          setSelectedOption(null);
-        }, 2200);
-      } else {
-        setQuestionFeedback({
-          isCorrect: false,
-          text: 'Jawaban Belum Tepat. Pelajari penjelasannya ya!',
-          explanation: q.explanation,
-        });
-
-        setTimeout(() => {
-          setActiveQuestion(null);
-          setQuestionFeedback(null);
-          setSelectedOption(null);
-          finishTurn(hasBonusRoll);
-        }, 2200);
-      }
-    }
-  };
+      advanceTurn(bonusRollActive);
+    },
+    [advanceTurn, isSoundMuted]
+  );
 
   // Game Victory Handler
   const handleGameVictory = (winningPlayer: SnakeLadderPlayer) => {
     setWinner(winningPlayer);
     setGameState('gameover');
+    setIsMoving(false);
+    setIsRolling(false);
     if (!isSoundMuted) soundManager.playSuccessSound();
 
     try {
@@ -582,12 +331,340 @@ export const SnakeLadderGameScreen: React.FC<SnakeLadderGameScreenProps> = ({
         winnerName: winningPlayer.name,
         className: winningPlayer.className,
         gradePlayed: config.activeGrade,
-        playersCount: players.length,
+        playersCount: playersRef.current.length,
         roundsCount,
         winningScore: winningPlayer.score + 500,
         completedAt: new Date().toLocaleString('id-ID'),
       };
       onSaveRecord(rec);
+    }
+  };
+
+  // Evaluate arrival on tile
+  const evaluateTileArrival = useCallback(
+    (playerIdx: number, finalPos: number, rolledValue: number) => {
+      setIsMoving(false);
+      const curPlayer = playersRef.current[playerIdx];
+      if (!curPlayer) return;
+
+      // Check Victory at 100
+      if (finalPos === 100) {
+        handleGameVictory(curPlayer);
+        return;
+      }
+
+      // Check Bonus Roll on 6
+      const gotSix = rolledValue === 6;
+      if (gotSix) {
+        setHasBonusRoll(true);
+        setEventToast({
+          text: `DAPAT ANGKA 6! ${curPlayer.name} mendapat bonus lemparan sekali lagi! 🎉`,
+          type: 'six',
+        });
+        setTimeout(() => setEventToast(null), 2800);
+      } else {
+        setHasBonusRoll(false);
+      }
+
+      // Check Ladder 🪜
+      if (LADDERS_MAP[finalPos]) {
+        const topPos = LADDERS_MAP[finalPos];
+        if (config.requireCorrectToClimb && !curPlayer.isBot) {
+          // Trigger English Question to climb!
+          const q = getSnakeLadderQuestion(config.activeGrade, usedQuestionsRef.current);
+          usedQuestionsRef.current.add(q.id);
+
+          setActiveQuestion({
+            question: q,
+            purpose: 'ladder',
+            targetTile: topPos,
+            playerIndex: playerIdx,
+          });
+          setSelectedOption(null);
+          setQuestionFeedback(null);
+          return;
+        } else {
+          // Direct climb for bot or if quiz requirement is turned off
+          climbLadderDirect(playerIdx, topPos, gotSix);
+          return;
+        }
+      }
+
+      // Check Snake 🐍
+      if (SNAKES_MAP[finalPos]) {
+        const tailPos = SNAKES_MAP[finalPos];
+        if (config.snakeShieldOnCorrect && !curPlayer.isBot) {
+          // Trigger English Question for Shield!
+          const q = getSnakeLadderQuestion(config.activeGrade, usedQuestionsRef.current);
+          usedQuestionsRef.current.add(q.id);
+
+          setActiveQuestion({
+            question: q,
+            purpose: 'snake',
+            targetTile: tailPos,
+            playerIndex: playerIdx,
+          });
+          setSelectedOption(null);
+          setQuestionFeedback(null);
+          return;
+        } else {
+          // Slide down for bot or direct slide
+          slideDownSnakeDirect(playerIdx, tailPos, gotSix);
+          return;
+        }
+      }
+
+      // Check Dedicated Question Tile ⭐
+      if (QUESTION_TILES.has(finalPos) && !curPlayer.isBot) {
+        const q = getSnakeLadderQuestion(config.activeGrade, usedQuestionsRef.current);
+        usedQuestionsRef.current.add(q.id);
+
+        setActiveQuestion({
+          question: q,
+          purpose: 'bonus',
+          targetTile: finalPos,
+          playerIndex: playerIdx,
+        });
+        setSelectedOption(null);
+        setQuestionFeedback(null);
+        return;
+      }
+
+      // Normal tile -> finish turn and pass to next player
+      advanceTurn(gotSix);
+    },
+    [advanceTurn, climbLadderDirect, config.activeGrade, config.requireCorrectToClimb, config.snakeShieldOnCorrect, slideDownSnakeDirect]
+  );
+
+  // Step-by-step moving animation
+  const stepPlayerToTarget = useCallback(
+    (playerIdx: number, startPos: number, targetPos: number, rolledValue: number) => {
+      setIsMoving(true);
+      let currentStep = startPos;
+
+      const stepTimer = setInterval(() => {
+        if (currentStep < targetPos) {
+          currentStep++;
+        } else if (currentStep > targetPos) {
+          currentStep--;
+        }
+
+        setPlayers((prev) => {
+          const next = prev.map((p, idx) => (idx === playerIdx ? { ...p, position: currentStep } : p));
+          playersRef.current = next;
+          return next;
+        });
+
+        if (!isSoundMuted) soundManager.playStepSound();
+
+        if (currentStep === targetPos) {
+          clearInterval(stepTimer);
+          // Evaluate target tile after landing
+          setTimeout(() => {
+            evaluateTileArrival(playerIdx, targetPos, rolledValue);
+          }, 150);
+        }
+      }, 130);
+    },
+    [evaluateTileArrival, isSoundMuted]
+  );
+
+  // Main Dice Roll Action
+  const triggerRoll = useCallback(
+    (playerIdx: number) => {
+      if (isRolling || isMoving || activeQuestion !== null || gameState !== 'playing') {
+        return;
+      }
+
+      setIsRolling(true);
+      if (!isSoundMuted) soundManager.playDiceRollSound();
+
+      // Animate dice faces tumbling
+      let count = 0;
+      const rollInterval = setInterval(() => {
+        count++;
+        const randomFace = Math.floor(Math.random() * 6) + 1;
+        setDiceNumber(randomFace);
+
+        if (count >= 8) {
+          clearInterval(rollInterval);
+          const finalRoll = Math.floor(Math.random() * 6) + 1;
+          setDiceNumber(finalRoll);
+          setIsRolling(false);
+
+          // Calculate destination
+          const curPlayer = playersRef.current[playerIdx];
+          if (!curPlayer) return;
+
+          const startPos = curPlayer.position;
+          let targetPos = startPos + finalRoll;
+
+          // Bounce back if overshoot 100
+          if (targetPos > 100) {
+            const overshoot = targetPos - 100;
+            targetPos = 100 - overshoot;
+          }
+
+          // Begin moving
+          stepPlayerToTarget(playerIdx, startPos, targetPos, finalRoll);
+        }
+      }, 50);
+    },
+    [activeQuestion, gameState, isMoving, isRolling, isSoundMuted, stepPlayerToTarget]
+  );
+
+  // Roll Handler for Button / Spacebar
+  const handleUserRoll = () => {
+    const curPlayer = playersRef.current[currentPlayerIndexRef.current];
+    if (!curPlayer || curPlayer.isBot) return;
+    triggerRoll(currentPlayerIndexRef.current);
+  };
+
+  // Keyboard shortcut: Spacebar or Enter to roll dice
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.code === 'Space' || e.key === 'Enter') {
+        if (gameState === 'playing' && !isRolling && !isMoving && activeQuestion === null) {
+          const curPlayer = playersRef.current[currentPlayerIndexRef.current];
+          if (curPlayer && !curPlayer.isBot) {
+            e.preventDefault();
+            handleUserRoll();
+          }
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [gameState, isRolling, isMoving, activeQuestion]);
+
+  // AI Bot Auto Roll Effect
+  useEffect(() => {
+    if (gameState !== 'playing' || isRolling || isMoving || activeQuestion !== null || winner) {
+      return;
+    }
+
+    const curPlayer = players[currentPlayerIndex];
+    if (curPlayer && curPlayer.isBot) {
+      const botTimer = setTimeout(() => {
+        triggerRoll(currentPlayerIndex);
+      }, 1000);
+
+      return () => clearTimeout(botTimer);
+    }
+  }, [currentPlayerIndex, gameState, isRolling, isMoving, activeQuestion, winner, players, triggerRoll]);
+
+  // Answer English Challenge Question
+  const handleAnswerQuestion = () => {
+    if (selectedOption === null || !activeQuestion) return;
+
+    const q = activeQuestion.question;
+    const isCorrect = selectedOption === q.correctAnswer;
+    const pIdx = activeQuestion.playerIndex;
+
+    // Update player question stats
+    setPlayers((prev) => {
+      const next = prev.map((p, idx) =>
+        idx === pIdx
+          ? {
+              ...p,
+              questionsAnswered: p.questionsAnswered + 1,
+              correctAnswers: p.correctAnswers + (isCorrect ? 1 : 0),
+              score: p.score + (isCorrect ? 100 : 0),
+            }
+          : p
+      );
+      playersRef.current = next;
+      return next;
+    });
+
+    if (isCorrect) {
+      if (!isSoundMuted) soundManager.playSuccessSound();
+
+      if (activeQuestion.purpose === 'ladder') {
+        setQuestionFeedback({
+          isCorrect: true,
+          text: `Jawaban Tepat! Anda berhak menaiki tangga emas ke petak ${activeQuestion.targetTile}! 🪜`,
+          explanation: q.explanation,
+        });
+
+        setTimeout(() => {
+          climbLadderDirect(pIdx, activeQuestion.targetTile, hasBonusRoll);
+          setActiveQuestion(null);
+          setQuestionFeedback(null);
+          setSelectedOption(null);
+        }, 1500);
+      } else if (activeQuestion.purpose === 'snake') {
+        setQuestionFeedback({
+          isCorrect: true,
+          text: 'Jawaban Tepat! Perisai Emas Melindungi Anda dari Gigitan Ular! Tetap aman di petak ini! 🛡️',
+          explanation: q.explanation,
+        });
+
+        setTimeout(() => {
+          setActiveQuestion(null);
+          setQuestionFeedback(null);
+          setSelectedOption(null);
+          advanceTurn(hasBonusRoll);
+        }, 1500);
+      } else {
+        // Bonus question tile
+        setQuestionFeedback({
+          isCorrect: true,
+          text: 'Jawaban Tepat! Anda mendapatkan bonus +100 XP! ⭐',
+          explanation: q.explanation,
+        });
+
+        setTimeout(() => {
+          setActiveQuestion(null);
+          setQuestionFeedback(null);
+          setSelectedOption(null);
+          advanceTurn(hasBonusRoll);
+        }, 1500);
+      }
+    } else {
+      if (!isSoundMuted) soundManager.playErrorSound();
+
+      if (activeQuestion.purpose === 'ladder') {
+        setQuestionFeedback({
+          isCorrect: false,
+          text: 'Jawaban Belum Tepat. Belum berhasil menaiki tangga, tetap di petak saat ini.',
+          explanation: q.explanation,
+        });
+
+        setTimeout(() => {
+          setActiveQuestion(null);
+          setQuestionFeedback(null);
+          setSelectedOption(null);
+          advanceTurn(hasBonusRoll);
+        }, 2200);
+      } else if (activeQuestion.purpose === 'snake') {
+        setQuestionFeedback({
+          isCorrect: false,
+          text: `Jawaban Belum Tepat. Tergelincir meluncur turun ke petak ${activeQuestion.targetTile}! 🐍`,
+          explanation: q.explanation,
+        });
+
+        setTimeout(() => {
+          slideDownSnakeDirect(pIdx, activeQuestion.targetTile, hasBonusRoll);
+          setActiveQuestion(null);
+          setQuestionFeedback(null);
+          setSelectedOption(null);
+        }, 2200);
+      } else {
+        setQuestionFeedback({
+          isCorrect: false,
+          text: 'Jawaban Belum Tepat. Pelajari pembahasannya ya!',
+          explanation: q.explanation,
+        });
+
+        setTimeout(() => {
+          setActiveQuestion(null);
+          setQuestionFeedback(null);
+          setSelectedOption(null);
+          advanceTurn(hasBonusRoll);
+        }, 2200);
+      }
     }
   };
 
@@ -726,26 +803,41 @@ export const SnakeLadderGameScreen: React.FC<SnakeLadderGameScreenProps> = ({
     }
   };
 
-  // Dice icon component helper
-  const renderDiceFace = (num: number) => {
-    switch (num) {
-      case 1:
-        return <Dice1 className="w-12 h-12 text-indigo-600" />;
-      case 2:
-        return <Dice2 className="w-12 h-12 text-indigo-600" />;
-      case 3:
-        return <Dice3 className="w-12 h-12 text-indigo-600" />;
-      case 4:
-        return <Dice4 className="w-12 h-12 text-indigo-600" />;
-      case 5:
-        return <Dice5 className="w-12 h-12 text-indigo-600" />;
-      case 6:
-      default:
-        return <Dice6 className="w-12 h-12 text-amber-500 animate-pulse" />;
-    }
+  // Render authentic 3D casino dice faces with pips
+  const renderDiceCube = (val: number) => {
+    // 3x3 grid dot positions
+    const dotMap: Record<number, number[]> = {
+      1: [4], // Center
+      2: [0, 8], // Top-left, Bottom-right
+      3: [0, 4, 8], // Diagonal
+      4: [0, 2, 6, 8], // 4 corners
+      5: [0, 2, 4, 6, 8], // 4 corners + center
+      6: [0, 2, 3, 5, 6, 8], // 2 columns of 3
+    };
+
+    const activeDots = new Set(dotMap[val] || [4]);
+    const isOne = val === 1;
+
+    return (
+      <div className="w-18 h-18 sm:w-20 sm:h-20 bg-white rounded-2xl border-2 border-slate-200 shadow-xl p-2.5 grid grid-cols-3 grid-rows-3 gap-1 select-none">
+        {Array.from({ length: 9 }).map((_, i) => (
+          <div key={i} className="flex items-center justify-center">
+            {activeDots.has(i) && (
+              <div
+                className={`w-3 h-3 sm:w-3.5 sm:h-3.5 rounded-full shadow-inner ${
+                  isOne ? 'bg-rose-600 scale-125' : 'bg-slate-900'
+                }`}
+              />
+            )}
+          </div>
+        ))}
+      </div>
+    );
   };
 
   const currentPlayer = players[currentPlayerIndex];
+  const isHumanTurn = currentPlayer && !currentPlayer.isBot;
+  const isTurnDisabled = isRolling || isMoving || activeQuestion !== null || !isHumanTurn;
 
   return (
     <div className="min-h-screen bg-slate-900 text-slate-100 flex flex-col font-sans select-none">
@@ -774,7 +866,7 @@ export const SnakeLadderGameScreen: React.FC<SnakeLadderGameScreenProps> = ({
                   </span>
                 </h1>
                 <p className="text-[11px] text-slate-400">
-                  Tingkat Soal: <strong>Kelas {config.activeGrade === 'all' ? '7–9' : config.activeGrade} SMP</strong>
+                  Materi Soal: <strong>Kelas {config.activeGrade === 'all' ? '7–9' : config.activeGrade} SMP</strong>
                 </p>
               </div>
             </div>
@@ -796,7 +888,7 @@ export const SnakeLadderGameScreen: React.FC<SnakeLadderGameScreenProps> = ({
                 title="Atur Ulang Pemain & Tingkat Kelas"
               >
                 <Settings className="w-3.5 h-3.5" />
-                <span className="hidden sm:inline">Pengaturan Pemain</span>
+                <span className="hidden sm:inline">Pemain Baru</span>
               </button>
             )}
           </div>
@@ -1102,7 +1194,7 @@ export const SnakeLadderGameScreen: React.FC<SnakeLadderGameScreenProps> = ({
                     const isFinish = tileNum === 100;
                     const isStart = tileNum === 1;
 
-                    // Players on this tile
+                    // Players currently on this tile
                     const playersHere = players.filter((p) => p.position === tileNum);
 
                     return (
@@ -1110,7 +1202,7 @@ export const SnakeLadderGameScreen: React.FC<SnakeLadderGameScreenProps> = ({
                         key={tileNum}
                         className={`relative w-8 h-8 sm:w-11 sm:h-11 rounded-lg sm:rounded-xl border flex flex-col justify-between p-0.5 sm:p-1 transition-all ${
                           isFinish
-                            ? 'bg-gradient-to-tr from-amber-500 to-yellow-400 border-amber-300 text-slate-950 shadow-md'
+                            ? 'bg-gradient-to-tr from-amber-500 to-yellow-400 border-amber-300 text-slate-950 shadow-md ring-2 ring-amber-400/40'
                             : isStart
                             ? 'bg-emerald-950/80 border-emerald-500 text-emerald-300'
                             : isLadder
@@ -1124,7 +1216,7 @@ export const SnakeLadderGameScreen: React.FC<SnakeLadderGameScreenProps> = ({
                             : 'bg-slate-900/70 border-slate-800/60 text-slate-400'
                         }`}
                       >
-                        {/* Tile Number */}
+                        {/* Tile Number & Badges */}
                         <div className="flex items-center justify-between leading-none">
                           <span
                             className={`text-[8px] sm:text-[10px] font-black ${
@@ -1182,40 +1274,47 @@ export const SnakeLadderGameScreen: React.FC<SnakeLadderGameScreenProps> = ({
               </div>
             </div>
 
-            {/* Right Side: Dice Controller & Live Player Scoreboard */}
-            <div className="flex flex-col items-center justify-between gap-3 w-full lg:w-72 bg-slate-950 p-4 rounded-3xl border border-slate-800">
+            {/* Right Side: Interactive Dice Controller & Live Player Scoreboard */}
+            <div className="flex flex-col items-center justify-between gap-3 w-full lg:w-72 bg-slate-950 p-4 rounded-3xl border border-slate-800 shadow-xl">
               {/* Turn Banner */}
-              <div className="w-full bg-slate-900/90 p-3.5 rounded-2xl border border-slate-800 text-center space-y-1">
+              <div className={`w-full p-3.5 rounded-2xl border text-center space-y-1 transition-all ${
+                isHumanTurn ? 'bg-teal-950/50 border-teal-500/50 shadow-md ring-1 ring-teal-500/30' : 'bg-slate-900/90 border-slate-800'
+              }`}>
                 <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
-                  GILIRAN MELEMPAR DADU
+                  {isHumanTurn ? '⭐ GILIRAN ANDA MELEMPAR DADU ⭐' : '🤖 GILIRAN LAWAN (BOT)'}
                 </p>
                 <div className="flex items-center justify-center gap-2">
-                  <div className={`w-8 h-8 rounded-xl bg-gradient-to-tr ${currentPlayer?.color} flex items-center justify-center text-base shadow-sm`}>
+                  <div className={`w-9 h-9 rounded-2xl bg-gradient-to-tr ${currentPlayer?.color} flex items-center justify-center text-lg shadow-sm border border-white/20`}>
                     {currentPlayer?.avatar}
                   </div>
                   <div className="text-left">
                     <span className="text-sm font-black text-white block leading-tight">{currentPlayer?.name}</span>
-                    <span className="text-[10px] text-teal-400 font-bold">Petak #{currentPlayer?.position}</span>
+                    <span className="text-[11px] text-teal-400 font-bold">Petak #{currentPlayer?.position}</span>
                   </div>
                 </div>
               </div>
 
-              {/* 3D Dice Area */}
+              {/* 3D Interactive Dice Area */}
               <div className="flex flex-col items-center justify-center p-4 bg-slate-900/80 rounded-3xl border border-slate-800 w-full space-y-3">
+                {/* Clickable 3D Dice Box */}
                 <div
-                  className={`w-20 h-20 rounded-2xl bg-white border-4 border-indigo-200 shadow-2xl flex items-center justify-center transition-all ${
-                    isRolling ? 'animate-spin scale-110' : 'hover:scale-105'
+                  onClick={() => {
+                    if (!isTurnDisabled) handleUserRoll();
+                  }}
+                  className={`transition-all duration-300 transform select-none ${
+                    isRolling ? 'rotate-[720deg] scale-110 cursor-wait' : isTurnDisabled ? 'cursor-not-allowed opacity-90' : 'cursor-pointer hover:scale-105 active:scale-95'
                   }`}
+                  title={isHumanTurn ? 'Klik Dadu atau Tekan Spasi untuk Mengocok!' : 'Menunggu giliran'}
                 >
-                  {renderDiceFace(diceNumber)}
+                  {renderDiceCube(diceNumber)}
                 </div>
 
                 <div className="text-center">
                   <span className="text-xs font-black text-slate-200 block">
-                    {isRolling ? 'Mengocok Dadu...' : `Angka Dadu: ${diceNumber}`}
+                    {isRolling ? 'Mengocok Dadu...' : isMoving ? 'Pion Sedang Berjalan...' : `Angka Dadu Terakhir: ${diceNumber}`}
                   </span>
                   {hasBonusRoll && (
-                    <span className="text-[11px] font-bold text-amber-400 block animate-bounce">
+                    <span className="text-[11px] font-black text-amber-400 block animate-bounce mt-0.5">
                       ★ Bonus Lemparan Sekali Lagi! ★
                     </span>
                   )}
@@ -1224,15 +1323,23 @@ export const SnakeLadderGameScreen: React.FC<SnakeLadderGameScreenProps> = ({
                 {/* Roll Dice Button */}
                 <button
                   type="button"
-                  disabled={isRolling || (currentPlayer?.isBot ?? false)}
-                  onClick={handleRollDice}
-                  className={`w-full py-3 rounded-2xl font-black text-xs shadow-lg transition-all flex items-center justify-center gap-2 cursor-pointer active:scale-95 ${
-                    isRolling || (currentPlayer?.isBot ?? false)
-                      ? 'bg-slate-800 text-slate-500 cursor-not-allowed'
-                      : 'bg-gradient-to-r from-teal-500 via-emerald-500 to-indigo-600 hover:from-teal-400 hover:to-indigo-500 text-slate-950'
+                  disabled={isTurnDisabled}
+                  onClick={handleUserRoll}
+                  className={`w-full py-3.5 rounded-2xl font-black text-xs shadow-lg transition-all flex items-center justify-center gap-2 cursor-pointer active:scale-95 ${
+                    isTurnDisabled
+                      ? 'bg-slate-800 text-slate-500 cursor-not-allowed border border-slate-700'
+                      : 'bg-gradient-to-r from-teal-500 via-emerald-500 to-indigo-600 hover:from-teal-400 hover:to-indigo-500 text-slate-950 ring-2 ring-teal-400/40 animate-pulse'
                   }`}
                 >
-                  <span>{currentPlayer?.isBot ? 'Bot Sedang Melangkah...' : 'Kocok Dadu! (Roll)'}</span>
+                  <span>
+                    {isRolling
+                      ? 'Mengocok Dadu...'
+                      : isMoving
+                      ? 'Melangkah di Papan...'
+                      : currentPlayer?.isBot
+                      ? 'Bot Sedang Berpikir...'
+                      : 'Kocok Dadu! (Klik / Tekan Spasi) 🎲'}
+                  </span>
                 </button>
               </div>
 
@@ -1247,12 +1354,12 @@ export const SnakeLadderGameScreen: React.FC<SnakeLadderGameScreenProps> = ({
                         key={p.id}
                         className={`flex items-center justify-between p-2 rounded-xl border text-xs transition-all ${
                           isTurn
-                            ? 'bg-teal-950/70 border-teal-500/70 text-white shadow-xs'
+                            ? 'bg-teal-950/70 border-teal-500/70 text-white shadow-xs ring-1 ring-teal-400/30'
                             : 'bg-slate-950/50 border-slate-800/80 text-slate-400'
                         }`}
                       >
                         <div className="flex items-center gap-2">
-                          <span className="text-sm">{p.avatar}</span>
+                          <span className="text-base">{p.avatar}</span>
                           <div>
                             <span className="font-extrabold text-white block leading-tight">{p.name}</span>
                             <span className="text-[10px] text-slate-400">{p.score} XP</span>

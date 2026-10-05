@@ -137,6 +137,79 @@ class SoundEffects {
     }
   }
 
+  // Realistic rolling dice sound effect
+  playDiceRollSound() {
+    try {
+      this.initCtx();
+      if (!this.ctx) return;
+      this.safeResume();
+      const ctx = this.ctx;
+      const now = ctx.currentTime;
+
+      // 6 rapid random percussive clicks
+      for (let i = 0; i < 6; i++) {
+        const time = now + i * 0.05 + Math.random() * 0.02;
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(250 + Math.random() * 200, time);
+        osc.frequency.exponentialRampToValueAtTime(80, time + 0.03);
+
+        gain.gain.setValueAtTime(0.08, time);
+        gain.gain.exponentialRampToValueAtTime(0.001, time + 0.035);
+
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+
+        osc.start(time);
+        osc.stop(time + 0.04);
+      }
+
+      // Final drop tap
+      const finalTime = now + 0.38;
+      const finalOsc = ctx.createOscillator();
+      const finalGain = ctx.createGain();
+      finalOsc.type = 'sine';
+      finalOsc.frequency.setValueAtTime(180, finalTime);
+      finalGain.gain.setValueAtTime(0.12, finalTime);
+      finalGain.gain.exponentialRampToValueAtTime(0.001, finalTime + 0.06);
+      finalOsc.connect(finalGain);
+      finalGain.connect(ctx.destination);
+      finalOsc.start(finalTime);
+      finalOsc.stop(finalTime + 0.06);
+    } catch {
+      // Ignore
+    }
+  }
+
+  // Pawn stepping sound
+  playStepSound() {
+    try {
+      this.initCtx();
+      if (!this.ctx) return;
+      this.safeResume();
+      const ctx = this.ctx;
+      const now = ctx.currentTime;
+
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(540, now);
+      osc.frequency.exponentialRampToValueAtTime(280, now + 0.05);
+
+      gain.gain.setValueAtTime(0.07, now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.05);
+
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start(now);
+      osc.stop(now + 0.05);
+    } catch {
+      // Ignore
+    }
+  }
+
   // Error buzz sound
   playErrorSound() {
     try {

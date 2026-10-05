@@ -29,10 +29,11 @@ import {
   Flame,
   Zap,
   Eye,
-  Compass,
-  Volume1,
   Layers,
-  Sparkle,
+  Volume1,
+  X,
+  Info,
+  Compass,
 } from 'lucide-react';
 import {
   SmpGradeLevel,
@@ -43,7 +44,6 @@ import {
   MazeCompletionRecord,
   MazeAvatar,
   MazeTheme,
-  MazePowerUpType,
 } from '../types';
 import { generateMazeGrid, DEFAULT_MAZE_CONFIG, MAZE_AVATARS } from '../data/mazeData';
 import { soundManager } from '../utils/audio';
@@ -137,11 +137,14 @@ export const MazeGameScreen: React.FC<MazeGameScreenProps> = ({
   const [isSoundMuted, setIsSoundMuted] = useState(false);
   const [stepsCount, setStepsCount] = useState(0);
 
-  // Modals
+  // Modals & Drawers
   const [showConfigModal, setShowConfigModal] = useState(false);
   const [showAvatarModal, setShowAvatarModal] = useState(false);
+  const [showVocabModal, setShowVocabModal] = useState(false);
+  const [showQuickMenu, setShowQuickMenu] = useState(false);
 
-  // Board Ref
+  // Swipe gesture detection ref
+  const touchStartRef = useRef<{ x: number; y: number } | null>(null);
   const boardRef = useRef<HTMLDivElement>(null);
 
   // Trigger Victory Confetti
@@ -165,7 +168,7 @@ export const MazeGameScreen: React.FC<MazeGameScreenProps> = ({
           spread: 55,
           origin: { x: 1 },
         });
-      }, 350);
+      }, 300);
     } catch {
       // ignore
     }
@@ -196,6 +199,7 @@ export const MazeGameScreen: React.FC<MazeGameScreenProps> = ({
       setTimeSpent(0);
       setIsGameWon(false);
       setStepsCount(0);
+      setShowQuickMenu(false);
     },
     [difficulty, selectedGrade]
   );
@@ -284,7 +288,7 @@ export const MazeGameScreen: React.FC<MazeGameScreenProps> = ({
 
         setTimeout(() => {
           setRecentGem(null);
-        }, 4000);
+        }, 3500);
       }
 
       // Check for Power-Up Item
@@ -297,31 +301,31 @@ export const MazeGameScreen: React.FC<MazeGameScreenProps> = ({
           setSpeedBoostSteps(20);
           setScore((prev) => prev + 75);
           setRecentItemToast({
-            title: 'Sepatu Kilat Diaktifkan! ⚡',
-            desc: 'Langkah cepat berenergi + 75 XP!',
+            title: 'Sepatu Kilat Aktif! ⚡',
+            desc: 'Langkah cepat berenergi +75 XP!',
             icon: '⚡',
           });
         } else if (powerUp.type === 'torch') {
           setTorchActiveUntil(Date.now() + 15000); // 15 seconds
           setScore((prev) => prev + 75);
           setRecentItemToast({
-            title: 'Obor Sakti Menyinari Labirin! 🔥',
-            desc: 'Jalur gerbang terdekat menyala terang selama 15 detik!',
+            title: 'Obor Sakti Menyala! 🔥',
+            desc: 'Jalur gerbang terdekat menyala terang 15 detik!',
             icon: '🔥',
           });
         } else if (powerUp.type === 'shield') {
           setHasShield(true);
           setScore((prev) => prev + 75);
           setRecentItemToast({
-            title: 'Perisai Tata Bahasa Aktif! 🛡️',
-            desc: 'Melindungi rantai kombo Anda dari 1 kesalahan!',
+            title: 'Perisai Emas Aktif! 🛡️',
+            desc: 'Melindungi rantai kombo dari 1 kesalahan!',
             icon: '🛡️',
           });
         }
 
         setTimeout(() => {
           setRecentItemToast(null);
-        }, 3500);
+        }, 3200);
       }
 
       // Check Exit Portal
@@ -332,52 +336,43 @@ export const MazeGameScreen: React.FC<MazeGameScreenProps> = ({
         }
       }
     },
-    [
-      activeCheckpoint,
-      comboStreak,
-      isGameWon,
-      isSoundMuted,
-      maze,
-      playerPos,
-      speedBoostSteps,
-    ]
+    [activeCheckpoint, comboStreak, isGameWon, isSoundMuted, maze, playerPos, speedBoostSteps]
   );
 
-  // Victory Handler
-  const handleVictory = () => {
-    setIsGameWon(true);
-    const timeBonus = Math.max(0, 500 - timeSpent * 2);
-    const gemBonus = collectedGems.length * 50;
-    const finalScore = score + 300 + timeBonus + gemBonus;
-    setScore(finalScore);
+  // Swipe Gestures for Mobile Screen
+  const handleTouchStart = (e: React.TouchEvent) => {
+    if (e.touches.length === 1) {
+      touchStartRef.current = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+    }
+  };
 
-    if (!isSoundMuted) soundManager.playSuccessSound();
-    triggerVictoryConfetti();
+  const handleTouchEnd = (e: React.TouchEvent) => {
+    if (!touchStartRef.current) return;
+    const touch = e.changedTouches[0];
+    const dx = touch.clientX - touchStartRef.current.x;
+    const dy = touch.clientY - touchStartRef.current.y;
+    touchStartRef.current = null;
 
-    // Record completion
-    if (onSaveCompletion && studentProfile) {
-      const record: MazeCompletionRecord = {
-        id: `maze-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
-        studentName: studentProfile.name,
-        className: studentProfile.className,
-        attendanceNumber: Number(studentProfile.attendanceNumber),
-        gradePlayed: selectedGrade === 'all' ? '7' : selectedGrade,
-        difficulty,
-        timeSpentSeconds: timeSpent,
-        starsCount: timeSpent < 90 ? 3 : timeSpent < 180 ? 2 : 1,
-        score: finalScore,
-        gatesCleared: maze.checkpoints.length,
-        totalGates: maze.checkpoints.length,
-        completedAt: new Date().toLocaleString('id-ID'),
-      };
-      onSaveCompletion(record);
+    const minSwipeDistance = 20; // 20px threshold
+    if (Math.abs(dx) > Math.abs(dy)) {
+      if (Math.abs(dx) > minSwipeDistance) {
+        if (dx > 0) handleMove(1, 0, 'right');
+        else handleMove(-1, 0, 'left');
+      }
+    } else {
+      if (Math.abs(dy) > minSwipeDistance) {
+        if (dy > 0) handleMove(0, 1, 'down');
+        else handleMove(0, -1, 'up');
+      }
     }
   };
 
   // Keyboard navigation
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (activeCheckpoint !== null || showConfigModal || showAvatarModal) return;
+      if (activeCheckpoint !== null || showConfigModal || showAvatarModal || showVocabModal || showQuickMenu) {
+        return;
+      }
 
       switch (e.key) {
         case 'ArrowUp':
@@ -411,7 +406,38 @@ export const MazeGameScreen: React.FC<MazeGameScreenProps> = ({
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [handleMove, activeCheckpoint, showConfigModal, showAvatarModal]);
+  }, [handleMove, activeCheckpoint, showConfigModal, showAvatarModal, showVocabModal, showQuickMenu]);
+
+  // Victory Handler
+  const handleVictory = () => {
+    setIsGameWon(true);
+    const timeBonus = Math.max(0, 500 - timeSpent * 2);
+    const gemBonus = collectedGems.length * 50;
+    const finalScore = score + 300 + timeBonus + gemBonus;
+    setScore(finalScore);
+
+    if (!isSoundMuted) soundManager.playSuccessSound();
+    triggerVictoryConfetti();
+
+    // Record completion
+    if (onSaveCompletion && studentProfile) {
+      const record: MazeCompletionRecord = {
+        id: `maze-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
+        studentName: studentProfile.name,
+        className: studentProfile.className,
+        attendanceNumber: Number(studentProfile.attendanceNumber),
+        gradePlayed: selectedGrade === 'all' ? '7' : selectedGrade,
+        difficulty,
+        timeSpentSeconds: timeSpent,
+        starsCount: timeSpent < 90 ? 3 : timeSpent < 180 ? 2 : 1,
+        score: finalScore,
+        gatesCleared: maze.checkpoints.length,
+        totalGates: maze.checkpoints.length,
+        completedAt: new Date().toLocaleString('id-ID'),
+      };
+      onSaveCompletion(record);
+    }
+  };
 
   // Answer Checkpoint Question
   const handleAnswerQuestion = () => {
@@ -462,7 +488,6 @@ export const MazeGameScreen: React.FC<MazeGameScreenProps> = ({
         explanation: q.explanation,
       });
 
-      // Clear combo banner after 2.5s
       setTimeout(() => setActiveComboBanner(null), 2500);
 
       // Move player into unlocked tile
@@ -472,7 +497,7 @@ export const MazeGameScreen: React.FC<MazeGameScreenProps> = ({
         setQuestionFeedback(null);
         setSelectedOption(null);
         soundManager.stopSpeech();
-      }, 1600);
+      }, 1500);
     } else {
       // Check if player has Grammar Shield
       if (hasShield) {
@@ -641,23 +666,26 @@ export const MazeGameScreen: React.FC<MazeGameScreenProps> = ({
   const themeStyles = {
     castle: {
       bg: 'bg-slate-950',
-      wall: 'bg-slate-800 border-slate-700 shadow-inner',
-      path: 'bg-slate-900/90',
-      boardBorder: 'border-indigo-500/30',
+      wall: 'bg-indigo-950 border-indigo-900/60 shadow-inner',
+      path: 'bg-slate-900/95',
+      boardBorder: 'border-indigo-500/40 shadow-indigo-500/10',
+      glow: 'shadow-[0_0_20px_rgba(99,102,241,0.2)]',
       label: 'Kastel Kuno',
     },
     forest: {
-      bg: 'bg-emerald-950',
-      wall: 'bg-emerald-900 border-emerald-800 shadow-inner',
-      path: 'bg-teal-950/80',
-      boardBorder: 'border-emerald-500/30',
+      bg: 'bg-zinc-950',
+      wall: 'bg-emerald-950 border-emerald-900/60 shadow-inner',
+      path: 'bg-teal-950/85',
+      boardBorder: 'border-emerald-500/40 shadow-emerald-500/10',
+      glow: 'shadow-[0_0_20px_rgba(16,185,129,0.2)]',
       label: 'Hutan Ajaib',
     },
     cyber: {
-      bg: 'bg-zinc-950',
-      wall: 'bg-zinc-800 border-cyan-500/40 shadow-inner',
-      path: 'bg-cyan-950/40',
-      boardBorder: 'border-cyan-500/40',
+      bg: 'bg-neutral-950',
+      wall: 'bg-cyan-950 border-cyan-800/70 shadow-inner',
+      path: 'bg-slate-950/90',
+      boardBorder: 'border-cyan-400/50 shadow-cyan-400/20',
+      glow: 'shadow-[0_0_20px_rgba(6,182,212,0.25)]',
       label: 'Cyber Lab',
     },
   }[activeTheme];
@@ -665,217 +693,233 @@ export const MazeGameScreen: React.FC<MazeGameScreenProps> = ({
   const isTorchActive = torchActiveUntil > Date.now();
 
   return (
-    <div className={`min-h-screen ${themeStyles.bg} text-slate-100 flex flex-col font-sans select-none transition-colors duration-500`}>
-      {/* Top Navbar */}
-      <header className="bg-slate-950/90 border-b border-slate-800 px-3 sm:px-4 py-2.5 sticky top-0 z-30 backdrop-blur-md">
-        <div className="max-w-6xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-2.5">
-          {/* Brand & Left Controls */}
-          <div className="flex items-center gap-2.5 w-full sm:w-auto justify-between sm:justify-start">
+    <div
+      className={`min-h-screen ${themeStyles.bg} text-slate-100 flex flex-col font-sans select-none transition-colors duration-500 overflow-x-hidden`}
+    >
+      {/* 1. Mobile-Optimized Ultra-Sleek Top Bar */}
+      <header className="bg-slate-950/90 border-b border-slate-800/90 px-2 sm:px-4 py-2 sticky top-0 z-30 backdrop-blur-md">
+        <div className="max-w-4xl mx-auto flex items-center justify-between gap-1.5 sm:gap-3">
+          {/* Back button + Avatar */}
+          <div className="flex items-center gap-1.5 sm:gap-2">
             <button
               onClick={onBackToHome}
-              className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold rounded-xl flex items-center gap-1.5 transition-all border border-slate-700 cursor-pointer active:scale-95"
-              title="Kembali ke Beranda Kuis"
+              className="p-1.5 sm:px-2.5 sm:py-1.5 bg-slate-900 hover:bg-slate-800 text-slate-300 rounded-xl border border-slate-700/80 flex items-center gap-1 text-xs font-bold transition-all active:scale-95 cursor-pointer"
+              title="Kembali ke Menu Kuis"
             >
-              <ArrowLeft className="w-3.5 h-3.5" />
-              <span>Menu Kuis</span>
+              <ArrowLeft className="w-4 h-4 text-slate-400" />
+              <span className="hidden sm:inline">Menu</span>
             </button>
 
-            {/* Avatar Profile Badge */}
+            {/* Avatar Pill */}
             <button
               onClick={() => setShowAvatarModal(true)}
-              className="flex items-center gap-2 bg-slate-900 hover:bg-slate-800 border border-slate-700 px-2.5 py-1 rounded-2xl transition-all cursor-pointer group"
-              title="Klik untuk Ganti Karakter Avatar"
+              className="flex items-center gap-1.5 bg-slate-900/90 hover:bg-slate-850 border border-slate-700/80 px-2 py-1 rounded-xl transition-all cursor-pointer active:scale-95 group"
+              title="Ganti Avatar Karakter"
             >
-              <div className={`w-7 h-7 rounded-xl bg-gradient-to-tr ${selectedAvatar.color} flex items-center justify-center text-sm shadow-sm group-hover:scale-105 transition-transform`}>
+              <div
+                className={`w-6 h-6 rounded-lg bg-gradient-to-tr ${selectedAvatar.color} flex items-center justify-center text-xs shadow-xs group-hover:scale-105`}
+              >
                 {selectedAvatar.emoji}
               </div>
-              <div className="text-left">
-                <span className="text-xs font-extrabold text-white flex items-center gap-1 leading-tight">
-                  <span>{selectedAvatar.name}</span>
-                  <span className="text-[10px] text-amber-400">▼</span>
-                </span>
-                <span className="text-[10px] text-slate-400 block -mt-0.5">{selectedAvatar.badge}</span>
-              </div>
+              <span className="text-[11px] font-black text-white max-w-[80px] sm:max-w-none truncate leading-none">
+                {selectedAvatar.name.split(' ')[0]}
+              </span>
             </button>
           </div>
 
-          {/* Center HUD Stats */}
-          <div className="flex items-center gap-2 sm:gap-3 text-xs overflow-x-auto max-w-full py-0.5">
-            {/* Combo Multiplier Badge */}
+          {/* Quick HUD Metrics (Compact for Layar HP) */}
+          <div className="flex items-center gap-1.5 sm:gap-2 text-[11px] sm:text-xs font-extrabold font-mono">
+            {/* Combo Streak */}
             {comboStreak >= 2 && (
-              <div className="px-2.5 py-1 bg-amber-500/20 border border-amber-400/60 rounded-xl flex items-center gap-1 text-amber-300 font-extrabold animate-pulse">
-                <Flame className="w-3.5 h-3.5 text-amber-400 fill-amber-400" />
-                <span>{comboStreak}x COMBO!</span>
+              <div className="px-2 py-1 bg-amber-500/20 border border-amber-400/70 rounded-xl flex items-center gap-1 text-amber-300 animate-pulse">
+                <Flame className="w-3 h-3 text-amber-400 fill-amber-400" />
+                <span>{comboStreak}x</span>
               </div>
             )}
 
-            {/* Active Grade */}
-            <div className="px-2.5 py-1 bg-indigo-950/70 border border-indigo-500/40 rounded-xl flex items-center gap-1 text-indigo-300 font-bold shrink-0">
-              <BookOpen className="w-3.5 h-3.5 text-indigo-400" />
-              <span>Kelas {selectedGrade === 'all' ? '7–9' : selectedGrade} SMP</span>
-            </div>
-
-            {/* Score */}
-            <div className="px-2.5 py-1 bg-emerald-950/70 border border-emerald-500/40 rounded-xl flex items-center gap-1 text-emerald-300 font-bold shrink-0">
-              <Trophy className="w-3.5 h-3.5 text-emerald-400" />
-              <span>{score} XP</span>
-            </div>
-
-            {/* Timer */}
-            <div className="px-2.5 py-1 bg-slate-800/80 border border-slate-700 rounded-xl flex items-center gap-1 text-amber-300 font-mono font-bold shrink-0">
-              <Clock className="w-3.5 h-3.5 text-amber-400" />
-              <span>{formatTime(timeSpent)}</span>
-            </div>
-
-            {/* Gate progress */}
-            <div className="px-2.5 py-1 bg-amber-950/70 border border-amber-500/40 rounded-xl flex items-center gap-1 text-amber-200 font-bold shrink-0">
+            {/* Keys Progress */}
+            <div className="px-2 py-1 bg-amber-950/70 border border-amber-500/50 rounded-xl flex items-center gap-1 text-amber-300">
               <Key className="w-3.5 h-3.5 text-amber-400" />
               <span>
                 {unlockedGatesCount}/{totalGatesCount}
               </span>
             </div>
+
+            {/* Score */}
+            <div className="px-2 py-1 bg-emerald-950/70 border border-emerald-500/50 rounded-xl flex items-center gap-1 text-emerald-300">
+              <Trophy className="w-3.5 h-3.5 text-emerald-400" />
+              <span>{score}</span>
+            </div>
+
+            {/* Timer */}
+            <div className="px-2 py-1 bg-slate-900 border border-slate-700 rounded-xl flex items-center gap-1 text-slate-300 hidden min-[400px]:flex">
+              <Clock className="w-3 h-3 text-amber-400" />
+              <span>{formatTime(timeSpent)}</span>
+            </div>
           </div>
 
-          {/* Right Action Buttons */}
-          <div className="flex items-center gap-1.5 self-end sm:self-center">
-            {/* Theme switcher */}
+          {/* Quick Menu Button for Mobile HP */}
+          <div className="flex items-center gap-1">
             <button
-              onClick={() => {
-                const nextTheme: Record<MazeTheme, MazeTheme> = {
-                  castle: 'forest',
-                  forest: 'cyber',
-                  cyber: 'castle',
-                };
-                setActiveTheme(nextTheme[activeTheme]);
-              }}
-              className="p-1.5 px-2 bg-slate-800 hover:bg-slate-700 rounded-xl text-xs font-bold text-slate-300 flex items-center gap-1 transition-all cursor-pointer"
-              title="Ganti Tema Visual Labirin (Kastel / Hutan / Cyber)"
+              onClick={() => setShowQuickMenu(!showQuickMenu)}
+              className="p-1.5 bg-indigo-600 hover:bg-indigo-500 active:bg-indigo-700 rounded-xl text-white shadow-sm transition-all cursor-pointer"
+              title="Menu Pengaturan Labirin"
             >
-              <Layers className="w-3.5 h-3.5 text-cyan-400" />
-              <span className="hidden sm:inline">{themeStyles.label}</span>
-            </button>
-
-            {/* Torch Mode Toggle */}
-            <button
-              onClick={() => setIsTorchMode(!isTorchMode)}
-              className={`p-1.5 px-2 rounded-xl text-xs font-bold flex items-center gap-1 transition-all cursor-pointer border ${
-                isTorchMode
-                  ? 'bg-amber-500/20 text-amber-300 border-amber-400'
-                  : 'bg-slate-800 text-slate-400 border-slate-700 hover:text-white'
-              }`}
-              title="Mode Obor Gelap Petualang (Lebih Menantang)"
-            >
-              <Eye className="w-3.5 h-3.5" />
-              <span className="hidden sm:inline">{isTorchMode ? 'Obor: ON' : 'Obor: OFF'}</span>
-            </button>
-
-            {/* Sound Mute */}
-            <button
-              onClick={() => setIsSoundMuted(!isSoundMuted)}
-              className="p-2 bg-slate-800 hover:bg-slate-700 rounded-xl text-slate-300 hover:text-white transition-colors cursor-pointer"
-              title={isSoundMuted ? 'Nyalakan Efek Suara' : 'Bisukan Suara'}
-            >
-              {isSoundMuted ? <VolumeX className="w-3.5 h-3.5" /> : <Volume2 className="w-3.5 h-3.5 text-emerald-400" />}
-            </button>
-
-            {/* Reset */}
-            <button
-              onClick={() => initNewMaze()}
-              className="p-2 bg-slate-800 hover:bg-slate-700 rounded-xl text-slate-300 hover:text-white transition-colors cursor-pointer"
-              title="Acak Ulang Labirin Baru"
-            >
-              <RotateCcw className="w-3.5 h-3.5" />
-            </button>
-
-            {/* Grade/Teacher settings */}
-            <button
-              onClick={() => setShowConfigModal(true)}
-              className="px-3 py-1.5 bg-gradient-to-r from-indigo-600 to-indigo-500 hover:from-indigo-500 hover:to-indigo-400 text-white font-bold text-xs rounded-xl flex items-center gap-1 shadow-sm transition-all cursor-pointer"
-              title="Pilih Tingkatan Kelas SMP"
-            >
-              <Settings className="w-3.5 h-3.5" />
-              <span className="hidden sm:inline">Pilih Kelas</span>
+              <Settings className="w-4 h-4" />
             </button>
           </div>
         </div>
+
+        {/* Quick Drawer / Popup Menu on Mobile */}
+        {showQuickMenu && (
+          <div className="mt-2 pt-2 border-t border-slate-800 flex flex-wrap items-center justify-between gap-1.5 text-xs max-w-4xl mx-auto animate-in slide-in-from-top-2 duration-150">
+            <div className="flex items-center gap-1.5 flex-wrap">
+              {/* Theme toggle */}
+              <button
+                onClick={() => {
+                  const nextTheme: Record<MazeTheme, MazeTheme> = {
+                    castle: 'forest',
+                    forest: 'cyber',
+                    cyber: 'castle',
+                  };
+                  setActiveTheme(nextTheme[activeTheme]);
+                }}
+                className="px-2 py-1 bg-slate-900 border border-slate-700 rounded-lg text-[11px] font-bold text-cyan-300 flex items-center gap-1 cursor-pointer"
+              >
+                <Layers className="w-3 h-3" />
+                <span>Tema: {themeStyles.label}</span>
+              </button>
+
+              {/* Torch toggle */}
+              <button
+                onClick={() => setIsTorchMode(!isTorchMode)}
+                className={`px-2 py-1 rounded-lg text-[11px] font-bold flex items-center gap-1 border cursor-pointer ${
+                  isTorchMode
+                    ? 'bg-amber-500/20 text-amber-300 border-amber-400'
+                    : 'bg-slate-900 text-slate-400 border-slate-700'
+                }`}
+              >
+                <Eye className="w-3 h-3" />
+                <span>{isTorchMode ? 'Obor: Aktif' : 'Obor: Mati'}</span>
+              </button>
+
+              {/* Sound mute */}
+              <button
+                onClick={() => setIsSoundMuted(!isSoundMuted)}
+                className="px-2 py-1 bg-slate-900 border border-slate-700 rounded-lg text-[11px] font-bold text-slate-300 flex items-center gap-1 cursor-pointer"
+              >
+                {isSoundMuted ? <VolumeX className="w-3 h-3" /> : <Volume2 className="w-3 h-3 text-emerald-400" />}
+                <span>{isSoundMuted ? 'Bisu' : 'Suara'}</span>
+              </button>
+
+              {/* Grade Selector Modal */}
+              <button
+                onClick={() => {
+                  setShowConfigModal(true);
+                  setShowQuickMenu(false);
+                }}
+                className="px-2 py-1 bg-indigo-950 border border-indigo-500/50 rounded-lg text-[11px] font-bold text-indigo-300 flex items-center gap-1 cursor-pointer"
+              >
+                <BookOpen className="w-3 h-3" />
+                <span>Kelas {selectedGrade} SMP</span>
+              </button>
+            </div>
+
+            {/* Reset Game */}
+            <button
+              onClick={() => initNewMaze()}
+              className="px-2 py-1 bg-slate-900 border border-slate-700 hover:bg-rose-950 hover:border-rose-700 rounded-lg text-[11px] font-bold text-slate-300 hover:text-rose-200 flex items-center gap-1 cursor-pointer ml-auto"
+            >
+              <RotateCcw className="w-3 h-3" />
+              <span>Acak Ulang</span>
+            </button>
+          </div>
+        )}
       </header>
 
-      {/* Main Game Arena */}
-      <main className="flex-1 flex flex-col items-center justify-center p-2 sm:p-4 max-w-6xl mx-auto w-full relative">
-        {/* Combo Floating Banner */}
+      {/* 2. Main Game Arena (Designed to Fit Comfortably in HP Viewport) */}
+      <main className="flex-1 flex flex-col items-center justify-between p-1.5 sm:p-3 max-w-4xl mx-auto w-full relative">
+        {/* Floating Combo Banner */}
         {activeComboBanner && (
-          <div className="absolute top-2 z-20 px-4 py-2 rounded-2xl bg-gradient-to-r from-amber-500 via-orange-500 to-rose-600 text-white font-black text-sm tracking-wider shadow-2xl animate-bounce">
+          <div className="absolute top-2 z-30 px-3.5 py-1.5 rounded-full bg-gradient-to-r from-amber-500 via-orange-500 to-rose-600 text-white font-black text-xs sm:text-sm tracking-wide shadow-xl animate-bounce">
             {activeComboBanner}
           </div>
         )}
 
-        {/* Toast for Item Pickup */}
+        {/* Item Pickup Toast */}
         {recentItemToast && (
-          <div className="absolute top-12 z-20 bg-slate-900/95 border-2 border-amber-400 text-white px-4 py-2.5 rounded-2xl shadow-2xl flex items-center gap-2.5 animate-in fade-in slide-in-from-top-4">
-            <span className="text-xl animate-spin">{recentItemToast.icon}</span>
-            <div className="text-xs">
+          <div className="absolute top-3 z-30 bg-slate-950/95 border-2 border-amber-400 text-white px-3 py-2 rounded-2xl shadow-2xl flex items-center gap-2 animate-in fade-in slide-in-from-top-3 max-w-[92vw]">
+            <span className="text-lg">{recentItemToast.icon}</span>
+            <div className="text-[11px] leading-tight">
               <span className="font-extrabold text-amber-300 block">{recentItemToast.title}</span>
-              <span className="text-slate-300 text-[11px]">{recentItemToast.desc}</span>
+              <span className="text-slate-300 text-[10px]">{recentItemToast.desc}</span>
             </div>
           </div>
         )}
 
-        {/* Toast for Vocabulary Gem */}
+        {/* Gem Pickup Toast */}
         {recentGem && (
-          <div className="absolute top-2 z-20 bg-indigo-950/95 border-2 border-indigo-400 text-white px-4 py-2.5 rounded-2xl shadow-2xl flex items-center gap-3 animate-in fade-in slide-in-from-top-4 duration-200">
-            <Gem className="w-5 h-5 text-cyan-300 animate-bounce" />
-            <div className="text-xs">
-              <div className="flex items-center gap-2">
-                <span className="font-extrabold text-amber-300 text-sm">{recentGem.word}</span>
+          <div className="absolute top-3 z-30 bg-indigo-950/95 border-2 border-indigo-400 text-white px-3 py-2 rounded-2xl shadow-2xl flex items-center gap-2.5 animate-in fade-in slide-in-from-top-3 max-w-[92vw]">
+            <Gem className="w-4 h-4 text-cyan-300 shrink-0 animate-bounce" />
+            <div className="text-[11px]">
+              <div className="flex items-center gap-1.5">
+                <span className="font-extrabold text-amber-300 text-xs">{recentGem.word}</span>
                 <button
                   type="button"
                   onClick={() => soundManager.speakEnglishText(recentGem.word, 0.9)}
-                  className="p-1 rounded-lg bg-indigo-800 hover:bg-indigo-700 text-cyan-300"
-                  title="Dengarkan Pengucapan Bahasa Inggris"
+                  className="p-0.5 rounded bg-indigo-800 text-cyan-300"
                 >
-                  <Volume2 className="w-3.5 h-3.5" />
+                  <Volume1 className="w-3 h-3" />
                 </button>
               </div>
-              <span className="text-slate-200 text-[11px]">{recentGem.meaning}</span>{' '}
-              <span className="text-emerald-400 font-bold">(+50 XP)</span>
+              <span className="text-slate-300 text-[10px]">{recentGem.meaning}</span>{' '}
+              <span className="text-emerald-400 font-bold text-[10px]">(+50 XP)</span>
             </div>
           </div>
         )}
 
-        {/* Maze Grid + Right Controller Panel */}
-        <div className="flex flex-col lg:flex-row items-center justify-center gap-4 w-full">
-          {/* Maze Grid Canvas Container */}
-          <div className={`p-2 sm:p-4 rounded-3xl border-2 ${themeStyles.boardBorder} bg-slate-950 shadow-2xl relative overflow-hidden`}>
-            {/* Active Power-Up Badges Overlay */}
-            <div className="absolute top-3 right-3 z-10 flex items-center gap-1.5 text-[10px]">
+        {/* 3. The Maze Board - Responsive Square Container (Anti-Cramping for Layar HP) */}
+        <div className="w-full flex flex-col items-center justify-center my-auto">
+          <div
+            className={`w-full max-w-[min(94vw,410px)] aspect-square p-2 rounded-3xl border-2 ${themeStyles.boardBorder} ${themeStyles.glow} bg-slate-950 relative overflow-hidden transition-all duration-300 flex flex-col justify-center`}
+            onTouchStart={handleTouchStart}
+            onTouchEnd={handleTouchEnd}
+          >
+            {/* Active Buffs Floating Chips */}
+            <div className="absolute top-2 right-2 z-10 flex items-center gap-1 text-[9px]">
               {speedBoostSteps > 0 && (
-                <span className="px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-400 font-bold flex items-center gap-1">
-                  <Zap className="w-3 h-3 text-amber-400" />
-                  <span>Sepatu Kilat ({speedBoostSteps})</span>
+                <span className="px-1.5 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-400 font-bold flex items-center gap-0.5">
+                  <Zap className="w-2.5 h-2.5 text-amber-400" />
+                  <span>{speedBoostSteps}</span>
                 </span>
               )}
               {isTorchActive && (
-                <span className="px-2 py-0.5 rounded-full bg-orange-500/20 text-orange-300 border border-orange-400 font-bold flex items-center gap-1 animate-pulse">
-                  <Flame className="w-3 h-3 text-orange-400" />
-                  <span>Obor Penunjuk Aktif</span>
+                <span className="px-1.5 py-0.5 rounded-full bg-orange-500/20 text-orange-300 border border-orange-400 font-bold flex items-center gap-0.5 animate-pulse">
+                  <Flame className="w-2.5 h-2.5 text-orange-400" />
+                  <span>Obor</span>
                 </span>
               )}
               {hasShield && (
-                <span className="px-2 py-0.5 rounded-full bg-cyan-500/20 text-cyan-300 border border-cyan-400 font-bold flex items-center gap-1">
-                  <Shield className="w-3 h-3 text-cyan-400" />
-                  <span>Perisai Terpasang</span>
+                <span className="px-1.5 py-0.5 rounded-full bg-cyan-500/20 text-cyan-300 border border-cyan-400 font-bold flex items-center gap-0.5">
+                  <Shield className="w-2.5 h-2.5 text-cyan-400" />
                 </span>
               )}
             </div>
 
-            {/* The Tile Grid */}
+            {/* Gesture Hint on Mobile */}
+            <div className="absolute top-2 left-2 z-10 opacity-70 text-[9px] text-slate-400 hidden min-[360px]:block">
+              <span>👆 Geser layar untuk bergerak</span>
+            </div>
+
+            {/* The Responsive Grid */}
             <div
               ref={boardRef}
-              className={`grid gap-[2px] sm:gap-[3px] p-2 rounded-2xl border border-slate-800 select-none touch-none ${
+              className={`w-full h-full grid gap-[1.5px] sm:gap-[2px] p-1 rounded-2xl border border-slate-800/90 select-none touch-none ${
                 isTorchMode ? 'filter contrast-125' : ''
               }`}
               style={{
                 gridTemplateColumns: `repeat(${maze.grid[0].length}, minmax(0, 1fr))`,
+                gridTemplateRows: `repeat(${maze.grid.length}, minmax(0, 1fr))`,
               }}
             >
               {maze.grid.map((row, y) =>
@@ -893,33 +937,25 @@ export const MazeGameScreen: React.FC<MazeGameScreenProps> = ({
                   const isVisibleInTorch = !isTorchMode || distFromPlayer <= 3.8;
                   const isTorchGlow = isTorchActive && (checkpoint || isExit);
 
-                  // Responsive tile sizing
-                  const cellSizeClass =
-                    difficulty === 'easy'
-                      ? 'w-7 h-7 sm:w-10 sm:h-10 text-xs sm:text-base'
-                      : difficulty === 'medium'
-                      ? 'w-5 h-5 sm:w-7 sm:h-7 text-[10px] sm:text-xs'
-                      : 'w-4 h-4 sm:w-6 sm:h-6 text-[8px] sm:text-[11px]';
-
                   return (
                     <div
                       key={`${x}-${y}`}
-                      className={`relative flex items-center justify-center rounded-sm sm:rounded transition-all duration-150 ${cellSizeClass} ${
+                      className={`relative w-full h-full aspect-square flex items-center justify-center rounded-[3px] sm:rounded transition-all duration-100 ${
                         isWall
                           ? `${themeStyles.wall} ${!isVisibleInTorch ? 'opacity-10' : 'opacity-100'}`
                           : `${themeStyles.path} ${
                               !isVisibleInTorch ? 'opacity-10' : 'opacity-100'
-                            } hover:bg-slate-800/40`
-                      } ${isTorchGlow ? 'ring-2 ring-amber-400 ring-offset-1 ring-offset-slate-900 animate-pulse' : ''}`}
+                            }`
+                      } ${isTorchGlow ? 'ring-1 sm:ring-2 ring-amber-400 animate-pulse' : ''}`}
                     >
                       {/* Player Avatar */}
                       {isPlayer && (
                         <div
-                          className="w-full h-full flex items-center justify-center z-10 transition-transform duration-100"
+                          className="w-full h-full flex items-center justify-center z-20"
                           title={`Karakter: ${selectedAvatar.name}`}
                         >
                           <div
-                            className={`w-4/5 h-4/5 rounded-full bg-gradient-to-tr ${selectedAvatar.color} shadow-lg border-2 border-white flex items-center justify-center text-white font-extrabold text-[11px] sm:text-sm animate-in zoom-in-75`}
+                            className={`w-[85%] h-[85%] rounded-full bg-gradient-to-tr ${selectedAvatar.color} shadow-lg ring-2 ring-white flex items-center justify-center text-white font-extrabold text-[10px] sm:text-xs leading-none animate-in zoom-in-75`}
                           >
                             {selectedAvatar.emoji}
                           </div>
@@ -928,7 +964,7 @@ export const MazeGameScreen: React.FC<MazeGameScreenProps> = ({
 
                       {/* Start Flag */}
                       {isStart && !isPlayer && isVisibleInTorch && (
-                        <span className="text-emerald-400 font-bold opacity-80" title="Titik Mulai (Start)">
+                        <span className="text-[10px] sm:text-xs text-emerald-400 font-bold opacity-80" title="Start">
                           🚩
                         </span>
                       )}
@@ -936,12 +972,12 @@ export const MazeGameScreen: React.FC<MazeGameScreenProps> = ({
                       {/* Exit Portal */}
                       {isExit && !isPlayer && isVisibleInTorch && (
                         <div
-                          className={`w-full h-full flex items-center justify-center rounded transition-all ${
+                          className={`w-full h-full flex items-center justify-center rounded transition-all text-[11px] sm:text-xs ${
                             isExitOpen
-                              ? 'bg-emerald-500/40 border border-emerald-300 animate-pulse text-emerald-200'
+                              ? 'bg-emerald-500/40 border border-emerald-300 animate-pulse text-emerald-200 ring-1 ring-emerald-400'
                               : 'bg-rose-500/20 border border-rose-500/40 text-rose-300 opacity-60'
                           }`}
-                          title={isExitOpen ? 'Pintu Keluar Terbuka!' : 'Pintu Keluar (Buka semua gerbang)'}
+                          title={isExitOpen ? 'Pintu Keluar Terbuka!' : 'Terkunci'}
                         >
                           {isExitOpen ? '🏆' : '🔒'}
                         </div>
@@ -950,16 +986,12 @@ export const MazeGameScreen: React.FC<MazeGameScreenProps> = ({
                       {/* Checkpoint Gates */}
                       {checkpoint && !isPlayer && isVisibleInTorch && (
                         <div
-                          className={`w-full h-full flex items-center justify-center transition-all ${
+                          className={`w-full h-full flex items-center justify-center transition-all text-[10px] sm:text-xs ${
                             checkpoint.isUnlocked
-                              ? 'text-emerald-400 opacity-70'
+                              ? 'text-emerald-400 opacity-60'
                               : 'text-amber-400 animate-bounce'
                           }`}
-                          title={
-                            checkpoint.isUnlocked
-                              ? 'Gerbang Terbuka'
-                              : 'Gerbang Terkunci - Jawab Soal Bahasa Inggris'
-                          }
+                          title={checkpoint.isUnlocked ? 'Terbuka' : 'Terkunci'}
                         >
                           {checkpoint.isUnlocked ? '🔓' : '🗝️'}
                         </div>
@@ -968,8 +1000,8 @@ export const MazeGameScreen: React.FC<MazeGameScreenProps> = ({
                       {/* Gem */}
                       {gem && !isPlayer && isVisibleInTorch && (
                         <div
-                          className="w-full h-full flex items-center justify-center text-cyan-300 animate-pulse drop-shadow-md"
-                          title={`Permata Kata: ${gem.word}`}
+                          className="w-full h-full flex items-center justify-center text-cyan-300 text-[10px] sm:text-xs animate-pulse drop-shadow-md"
+                          title={`Kata: ${gem.word}`}
                         >
                           💎
                         </div>
@@ -978,14 +1010,8 @@ export const MazeGameScreen: React.FC<MazeGameScreenProps> = ({
                       {/* Power-up Item */}
                       {powerUp && !isPlayer && isVisibleInTorch && (
                         <div
-                          className="w-full h-full flex items-center justify-center text-amber-300 animate-bounce drop-shadow-md"
-                          title={`Item: ${
-                            powerUp.type === 'speed'
-                              ? 'Sepatu Kilat'
-                              : powerUp.type === 'torch'
-                              ? 'Obor Sakti'
-                              : 'Perisai Emas'
-                          }`}
+                          className="w-full h-full flex items-center justify-center text-amber-300 text-[10px] sm:text-xs animate-bounce drop-shadow-md"
+                          title={`Item: ${powerUp.type}`}
                         >
                           {powerUp.type === 'speed' ? '⚡' : powerUp.type === 'torch' ? '🔥' : '🛡️'}
                         </div>
@@ -995,174 +1021,129 @@ export const MazeGameScreen: React.FC<MazeGameScreenProps> = ({
                 })
               )}
             </div>
+          </div>
+        </div>
 
-            {/* Instruction Footer below Maze */}
-            <div className="mt-3 flex flex-col sm:flex-row items-center justify-between text-[11px] text-slate-400 px-1 gap-1">
-              <span className="flex items-center gap-1.5">
-                <span>Tekan <strong>Panah / W,A,S,D</strong> atau D-Pad layar</span>
-                {speedBoostSteps > 0 && <span className="text-amber-300 font-bold">⚡ Kecepatan Berlipat</span>}
-              </span>
-              <span className="text-amber-300 font-bold">
-                Langkah: {stepsCount} • 🗝️ Kunci: {unlockedGatesCount}/{totalGatesCount} • 🏆 Portal Keluar
-              </span>
+        {/* 4. Ergonomic Mobile Controller Bar (Directly below Maze, No Scrolling Needed) */}
+        <div className="w-full max-w-[min(94vw,410px)] bg-slate-950/95 border border-slate-800/90 p-2 sm:p-3 rounded-3xl shadow-xl flex items-center justify-between gap-2 mt-2">
+          {/* Left: Vocabulary Collector Pill */}
+          <button
+            type="button"
+            onClick={() => setShowVocabModal(true)}
+            className="flex flex-col items-center justify-center p-2 rounded-2xl bg-slate-900 hover:bg-slate-850 active:bg-slate-800 border border-slate-700/80 text-cyan-300 transition-all cursor-pointer active:scale-95 shrink-0"
+            title="Buka Koleksi Kosakata"
+          >
+            <div className="flex items-center gap-1 font-bold text-xs">
+              <Gem className="w-4 h-4 text-cyan-400" />
+              <span>{collectedGems.length}</span>
             </div>
+            <span className="text-[9px] text-slate-400 font-semibold leading-tight mt-0.5">Kosakata</span>
+          </button>
+
+          {/* Center: Ergonomic 4-Way Thumb D-Pad for Mobile Touchscreens */}
+          <div className="flex flex-col items-center justify-center">
+            {/* Up */}
+            <button
+              type="button"
+              onClick={() => handleMove(0, -1, 'up')}
+              className="w-11 h-11 sm:w-12 sm:h-12 rounded-2xl bg-gradient-to-b from-slate-800 to-slate-900 active:from-indigo-600 active:to-indigo-700 text-white flex items-center justify-center shadow-md border border-slate-700 active:scale-90 transition-transform cursor-pointer"
+              title="Atas"
+            >
+              <ChevronUp className="w-6 h-6 text-indigo-300" />
+            </button>
+
+            {/* Left, Avatar Center, Right */}
+            <div className="flex items-center gap-2 my-0.5">
+              <button
+                type="button"
+                onClick={() => handleMove(-1, 0, 'left')}
+                className="w-11 h-11 sm:w-12 sm:h-12 rounded-2xl bg-gradient-to-b from-slate-800 to-slate-900 active:from-indigo-600 active:to-indigo-700 text-white flex items-center justify-center shadow-md border border-slate-700 active:scale-90 transition-transform cursor-pointer"
+                title="Kiri"
+              >
+                <ChevronLeft className="w-6 h-6 text-indigo-300" />
+              </button>
+
+              <div
+                onClick={() => setShowAvatarModal(true)}
+                className={`w-9 h-9 sm:w-10 sm:h-10 rounded-2xl bg-gradient-to-tr ${selectedAvatar.color} border border-white/40 flex items-center justify-center text-white text-base shadow-sm cursor-pointer active:scale-95`}
+                title="Ganti Avatar"
+              >
+                {selectedAvatar.emoji}
+              </div>
+
+              <button
+                type="button"
+                onClick={() => handleMove(1, 0, 'right')}
+                className="w-11 h-11 sm:w-12 sm:h-12 rounded-2xl bg-gradient-to-b from-slate-800 to-slate-900 active:from-indigo-600 active:to-indigo-700 text-white flex items-center justify-center shadow-md border border-slate-700 active:scale-90 transition-transform cursor-pointer"
+                title="Kanan"
+              >
+                <ChevronRight className="w-6 h-6 text-indigo-300" />
+              </button>
+            </div>
+
+            {/* Down */}
+            <button
+              type="button"
+              onClick={() => handleMove(0, 1, 'down')}
+              className="w-11 h-11 sm:w-12 sm:h-12 rounded-2xl bg-gradient-to-b from-slate-800 to-slate-900 active:from-indigo-600 active:to-indigo-700 text-white flex items-center justify-center shadow-md border border-slate-700 active:scale-90 transition-transform cursor-pointer"
+              title="Bawah"
+            >
+              <ChevronDown className="w-6 h-6 text-indigo-300" />
+            </button>
           </div>
 
-          {/* Right Side: Virtual Mobile D-Pad, Power-ups & Quest Status */}
-          <div className="flex flex-col items-center justify-between gap-3 w-full lg:w-72 bg-slate-950 p-4 rounded-3xl border border-slate-800">
-            {/* Quest Status Card */}
-            <div className="w-full bg-slate-900/90 p-3.5 rounded-2xl border border-slate-800 space-y-2">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-bold text-slate-300 flex items-center gap-1.5">
-                  <Key className="w-4 h-4 text-amber-400" />
-                  <span>Kunci Gerbang Soal:</span>
-                </span>
-                <span className="text-xs font-extrabold text-amber-400 font-mono">
-                  {unlockedGatesCount} / {totalGatesCount}
-                </span>
-              </div>
-
-              {/* Progress bar */}
-              <div className="w-full bg-slate-800 h-2 rounded-full overflow-hidden">
-                <div
-                  className="h-full bg-gradient-to-r from-amber-500 to-emerald-500 transition-all duration-300"
-                  style={{ width: `${(unlockedGatesCount / totalGatesCount) * 100}%` }}
-                />
-              </div>
-
-              <p className="text-[11px] text-slate-400 leading-tight">
-                {isExitOpen
-                  ? '✨ Pintu keluar 🏆 terbuka! Segera melangkah ke portal untuk menang!'
-                  : `Buka ${totalGatesCount - unlockedGatesCount} gerbang soal lagi untuk membuka portal keluar.`}
-              </p>
+          {/* Right: Quest Gate Status Pill */}
+          <div className="flex flex-col items-center justify-center p-2 rounded-2xl bg-slate-900 border border-slate-700/80 text-amber-300 shrink-0 text-center">
+            <div className="flex items-center gap-1 font-bold text-xs font-mono">
+              <Key className="w-4 h-4 text-amber-400" />
+              <span>
+                {unlockedGatesCount}/{totalGatesCount}
+              </span>
             </div>
-
-            {/* Collected Words Vocabulary Card */}
-            <div className="w-full bg-slate-900/90 p-3 rounded-2xl border border-slate-800 space-y-1.5">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-bold text-slate-300 flex items-center gap-1.5">
-                  <Gem className="w-4 h-4 text-cyan-400" />
-                  <span>Koleksi Kosakata ({collectedGems.length}):</span>
-                </span>
-              </div>
-              <div className="flex flex-wrap gap-1 max-h-20 overflow-y-auto pt-0.5">
-                {collectedGems.length === 0 ? (
-                  <span className="text-[10px] text-slate-500 italic">Jelajahi lorong untuk mengoleksi permata kata.</span>
-                ) : (
-                  collectedGems.map((gId, i) => {
-                    const gemObj = maze.gems.find((g) => g.id === gId);
-                    return (
-                      <button
-                        key={i}
-                        type="button"
-                        onClick={() => gemObj && soundManager.speakEnglishText(gemObj.word, 0.9)}
-                        className="px-2 py-0.5 bg-cyan-950/80 hover:bg-cyan-900 border border-cyan-500/40 text-cyan-200 text-[10px] font-bold rounded flex items-center gap-1 cursor-pointer transition-colors"
-                        title={`${gemObj?.word} = ${gemObj?.meaning} (Klik untuk dengar suara)`}
-                      >
-                        <span>{gemObj?.word}</span>
-                        <Volume1 className="w-2.5 h-2.5 text-cyan-400" />
-                      </button>
-                    );
-                  })
-                )}
-              </div>
-            </div>
-
-            {/* Virtual Touch Controller (D-Pad) for Mobile / Touchscreen */}
-            <div className="flex flex-col items-center justify-center p-2 bg-slate-900 rounded-3xl border border-slate-800 shadow-inner w-full">
-              <p className="text-[10px] font-bold text-slate-400 mb-1">KONTROL SENTUH / D-PAD</p>
-              {/* Up */}
-              <button
-                type="button"
-                onClick={() => handleMove(0, -1, 'up')}
-                className="w-12 h-12 rounded-2xl bg-slate-800 hover:bg-indigo-600 active:bg-indigo-700 text-white flex items-center justify-center shadow-md border border-slate-700 active:scale-95 transition-all cursor-pointer"
-                title="Atas"
-              >
-                <ChevronUp className="w-6 h-6" />
-              </button>
-
-              {/* Left, Center Avatar, Right */}
-              <div className="flex items-center gap-3 my-1">
-                <button
-                  type="button"
-                  onClick={() => handleMove(-1, 0, 'left')}
-                  className="w-12 h-12 rounded-2xl bg-slate-800 hover:bg-indigo-600 active:bg-indigo-700 text-white flex items-center justify-center shadow-md border border-slate-700 active:scale-95 transition-all cursor-pointer"
-                  title="Kiri"
-                >
-                  <ChevronLeft className="w-6 h-6" />
-                </button>
-
-                <div
-                  onClick={() => setShowAvatarModal(true)}
-                  className={`w-10 h-10 rounded-2xl bg-gradient-to-tr ${selectedAvatar.color} border border-white/40 flex items-center justify-center text-white text-base shadow-sm cursor-pointer`}
-                  title="Ganti Avatar"
-                >
-                  {selectedAvatar.emoji}
-                </div>
-
-                <button
-                  type="button"
-                  onClick={() => handleMove(1, 0, 'right')}
-                  className="w-12 h-12 rounded-2xl bg-slate-800 hover:bg-indigo-600 active:bg-indigo-700 text-white flex items-center justify-center shadow-md border border-slate-700 active:scale-95 transition-all cursor-pointer"
-                  title="Kanan"
-                >
-                  <ChevronRight className="w-6 h-6" />
-                </button>
-              </div>
-
-              {/* Down */}
-              <button
-                type="button"
-                onClick={() => handleMove(0, 1, 'down')}
-                className="w-12 h-12 rounded-2xl bg-slate-800 hover:bg-indigo-600 active:bg-indigo-700 text-white flex items-center justify-center shadow-md border border-slate-700 active:scale-95 transition-all cursor-pointer"
-                title="Bawah"
-              >
-                <ChevronDown className="w-6 h-6" />
-              </button>
-            </div>
+            <span className="text-[9px] text-slate-400 font-semibold leading-tight mt-0.5">Gerbang</span>
           </div>
         </div>
       </main>
 
-      {/* MODAL 1: CHECKPOINT ENGLISH QUESTION (TANTANGAN GERBANG) */}
+      {/* MODAL 1: CHECKPOINT ENGLISH QUESTION (TANTANGAN GERBANG SOAL HP) */}
       {activeCheckpoint && (
-        <div className="fixed inset-0 z-50 bg-slate-950/85 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4 animate-in fade-in duration-200">
-          <div className="bg-slate-900 border-2 border-indigo-500 rounded-3xl max-w-lg w-full p-5 sm:p-6 shadow-2xl space-y-4 animate-in zoom-in-95 duration-200 text-slate-100">
-            {/* Header with audio TTS button */}
-            <div className="flex items-center justify-between pb-3 border-b border-slate-800">
-              <div className="flex items-center gap-2.5">
-                <div className="w-9 h-9 rounded-xl bg-amber-500 text-slate-950 flex items-center justify-center font-extrabold shadow-md">
+        <div className="fixed inset-0 z-50 bg-slate-950/85 backdrop-blur-sm flex items-end sm:items-center justify-center p-2 sm:p-4 animate-in fade-in duration-200">
+          <div className="bg-slate-900 border-2 border-indigo-500 rounded-3xl max-w-lg w-full p-4 sm:p-6 shadow-2xl space-y-3.5 animate-in slide-in-from-bottom-4 sm:zoom-in-95 duration-200 text-slate-100 max-h-[92vh] overflow-y-auto">
+            {/* Header */}
+            <div className="flex items-center justify-between pb-2.5 border-b border-slate-800">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-xl bg-amber-500 text-slate-950 flex items-center justify-center font-black shadow-md text-sm">
                   🗝️
                 </div>
                 <div>
-                  <h3 className="text-sm sm:text-base font-bold text-white flex items-center gap-1.5">
-                    <span>Gerbang Soal Bahasa Inggris</span>
-                    <span className="text-[10px] bg-indigo-500/20 text-indigo-300 border border-indigo-400/30 px-1.5 py-0.2 rounded font-bold">
-                      Kelas {activeCheckpoint.question.grade} SMP
+                  <h3 className="text-xs sm:text-sm font-bold text-white flex items-center gap-1">
+                    <span>Tantangan Gerbang Bahasa Inggris</span>
+                    <span className="text-[10px] bg-indigo-500/20 text-indigo-300 border border-indigo-400/30 px-1 py-0.2 rounded font-bold">
+                      Kelas {activeCheckpoint.question.grade}
                     </span>
                   </h3>
-                  <p className="text-[11px] text-slate-400">{activeCheckpoint.question.topic}</p>
+                  <p className="text-[10px] text-slate-400">{activeCheckpoint.question.topic}</p>
                 </div>
               </div>
 
-              {/* Pronounce question button */}
+              {/* Speaker TTS */}
               <button
                 type="button"
                 onClick={() => handleSpeakText(activeCheckpoint.question.question)}
-                className={`p-2 rounded-xl border flex items-center gap-1 text-xs font-bold transition-all cursor-pointer ${
+                className={`p-1.5 sm:px-2.5 sm:py-1 rounded-xl border flex items-center gap-1 text-[11px] font-bold transition-all cursor-pointer ${
                   isSpeakingQuestion
                     ? 'bg-amber-500 text-slate-950 border-amber-400 animate-pulse'
                     : 'bg-slate-800 text-slate-300 border-slate-700 hover:text-white'
                 }`}
-                title="Dengarkan Pengucapan Soal dalam Bahasa Inggris"
+                title="Dengarkan Pengucapan Bahasa Inggris"
               >
                 <Volume2 className="w-3.5 h-3.5" />
-                <span className="hidden sm:inline">{isSpeakingQuestion ? 'Memutar...' : 'Dengar'}</span>
+                <span className="hidden min-[380px]:inline">{isSpeakingQuestion ? 'Memutar' : 'Dengar'}</span>
               </button>
             </div>
 
             {/* Question Text */}
-            <div className="p-3.5 bg-slate-950/80 rounded-2xl border border-slate-800 text-xs sm:text-sm font-semibold text-slate-200 whitespace-pre-line leading-relaxed">
+            <div className="p-3 bg-slate-950/80 rounded-2xl border border-slate-800 text-xs sm:text-sm font-semibold text-slate-200 whitespace-pre-line leading-relaxed">
               {activeCheckpoint.question.question}
             </div>
 
@@ -1179,14 +1160,14 @@ export const MazeGameScreen: React.FC<MazeGameScreenProps> = ({
                     onClick={() => {
                       if (!questionFeedback) setSelectedOption(idx);
                     }}
-                    className={`w-full p-3 text-left rounded-xl border-2 transition-all flex items-center gap-2.5 text-xs sm:text-sm cursor-pointer ${
+                    className={`w-full p-2.5 sm:p-3 text-left rounded-xl border-2 transition-all flex items-center gap-2 text-xs sm:text-sm cursor-pointer ${
                       isSelected
-                        ? 'border-indigo-500 bg-indigo-950/80 text-white shadow-md'
-                        : 'border-slate-800 bg-slate-950/40 text-slate-300 hover:border-slate-700 hover:bg-slate-800/50'
+                        ? 'border-indigo-500 bg-indigo-950/80 text-white shadow-md ring-1 ring-indigo-500/30'
+                        : 'border-slate-800 bg-slate-950/40 text-slate-300 hover:border-slate-700'
                     }`}
                   >
                     <span
-                      className={`w-6 h-6 rounded-lg flex items-center justify-center font-extrabold text-xs shrink-0 ${
+                      className={`w-5 h-5 sm:w-6 sm:h-6 rounded-lg flex items-center justify-center font-extrabold text-xs shrink-0 ${
                         isSelected ? 'bg-indigo-600 text-white' : 'bg-slate-800 text-slate-400'
                       }`}
                     >
@@ -1201,7 +1182,7 @@ export const MazeGameScreen: React.FC<MazeGameScreenProps> = ({
             {/* Feedback & Grammar explanation */}
             {questionFeedback && (
               <div
-                className={`p-3.5 rounded-2xl border text-xs space-y-1 animate-in fade-in duration-150 ${
+                className={`p-3 rounded-2xl border text-xs space-y-1 animate-in fade-in duration-150 ${
                   questionFeedback.isCorrect
                     ? 'bg-emerald-950/70 border-emerald-500/60 text-emerald-200'
                     : 'bg-rose-950/70 border-rose-500/60 text-rose-200'
@@ -1216,13 +1197,13 @@ export const MazeGameScreen: React.FC<MazeGameScreenProps> = ({
                   <span>{questionFeedback.text}</span>
                 </div>
                 <p className="text-[11px] opacity-90 leading-relaxed pt-0.5">
-                  <strong>Penjelasan Tata Bahasa:</strong> {questionFeedback.explanation}
+                  <strong>Penjelasan:</strong> {questionFeedback.explanation}
                 </p>
               </div>
             )}
 
-            {/* Actions */}
-            <div className="flex items-center justify-between pt-2">
+            {/* Action buttons */}
+            <div className="flex items-center justify-between pt-1">
               <button
                 type="button"
                 onClick={() => {
@@ -1231,9 +1212,9 @@ export const MazeGameScreen: React.FC<MazeGameScreenProps> = ({
                   setQuestionFeedback(null);
                   setSelectedOption(null);
                 }}
-                className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-xs rounded-xl transition-all cursor-pointer"
+                className="px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-xs rounded-xl cursor-pointer"
               >
-                Nanti Saja (Mundur)
+                Nanti Saja
               </button>
 
               {!questionFeedback?.isCorrect && (
@@ -1241,7 +1222,7 @@ export const MazeGameScreen: React.FC<MazeGameScreenProps> = ({
                   type="button"
                   disabled={selectedOption === null}
                   onClick={handleAnswerQuestion}
-                  className={`px-5 py-2 font-bold text-xs rounded-xl shadow-md transition-all cursor-pointer ${
+                  className={`px-4 sm:px-5 py-2 font-bold text-xs rounded-xl shadow-md transition-all cursor-pointer ${
                     selectedOption !== null
                       ? 'bg-gradient-to-r from-amber-500 to-indigo-600 hover:from-amber-400 hover:to-indigo-500 text-white'
                       : 'bg-slate-800 text-slate-500 cursor-not-allowed'
@@ -1255,79 +1236,147 @@ export const MazeGameScreen: React.FC<MazeGameScreenProps> = ({
         </div>
       )}
 
-      {/* MODAL 2: VICTORY & CELEBRATION (PENAKLUK LABIRIN) */}
+      {/* MODAL 2: VOCABULARY GEM LIST MODAL (KOLEKSI KATA DI HP) */}
+      {showVocabModal && (
+        <div className="fixed inset-0 z-50 bg-slate-950/85 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4">
+          <div className="bg-slate-900 border border-slate-700 rounded-3xl max-w-sm w-full p-5 shadow-2xl space-y-3.5 text-slate-100 animate-in fade-in zoom-in-95 duration-200">
+            <div className="flex items-center justify-between pb-2 border-b border-slate-800">
+              <div className="flex items-center gap-2">
+                <div className="w-7 h-7 rounded-lg bg-cyan-600 flex items-center justify-center text-white">
+                  <Gem className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-white">Koleksi Permata Kosakata</h3>
+                  <p className="text-[10px] text-slate-400">{collectedGems.length} kata telah dikumpulkan</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowVocabModal(false)}
+                className="p-1 rounded-lg bg-slate-800 text-slate-400 hover:text-white"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
+              {collectedGems.length === 0 ? (
+                <div className="text-center py-6 text-slate-500 text-xs italic">
+                  Belum ada permata kata yang dikumpulkan. Jelajahi lorong labirin untuk menemukan permata 💎!
+                </div>
+              ) : (
+                collectedGems.map((gId, i) => {
+                  const gemObj = maze.gems.find((g) => g.id === gId);
+                  if (!gemObj) return null;
+                  return (
+                    <div
+                      key={i}
+                      className="p-2.5 bg-slate-950/80 rounded-xl border border-slate-800 flex items-center justify-between gap-2"
+                    >
+                      <div>
+                        <span className="font-extrabold text-cyan-300 text-xs block">{gemObj.word}</span>
+                        <span className="text-[10px] text-slate-300">{gemObj.meaning}</span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => soundManager.speakEnglishText(gemObj.word, 0.9)}
+                        className="p-1.5 rounded-lg bg-cyan-950 hover:bg-cyan-900 border border-cyan-500/40 text-cyan-300 cursor-pointer"
+                        title="Dengarkan Pengucapan"
+                      >
+                        <Volume2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setShowVocabModal(false)}
+              className="w-full py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-xs rounded-xl"
+            >
+              Tutup
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL 3: VICTORY & CELEBRATION */}
       {isGameWon && (
-        <div className="fixed inset-0 z-50 bg-slate-950/90 backdrop-blur-md flex items-center justify-center p-4">
-          <div className="bg-slate-900 border-2 border-amber-400 rounded-3xl max-w-md w-full p-6 sm:p-8 text-center space-y-5 shadow-2xl text-slate-100 animate-in fade-in zoom-in-95 duration-200">
-            {/* Victory Avatar Animation */}
-            <div className="relative w-24 h-24 mx-auto">
-              <div className={`w-24 h-24 rounded-3xl bg-gradient-to-tr ${selectedAvatar.color} flex items-center justify-center text-4xl shadow-2xl ring-8 ring-amber-400/30 animate-bounce`}>
+        <div className="fixed inset-0 z-50 bg-slate-950/90 backdrop-blur-md flex items-center justify-center p-3 sm:p-4">
+          <div className="bg-slate-900 border-2 border-amber-400 rounded-3xl max-w-sm w-full p-5 sm:p-6 text-center space-y-4 shadow-2xl text-slate-100 animate-in fade-in zoom-in-95 duration-200">
+            {/* Avatar Animation */}
+            <div className="relative w-20 h-20 mx-auto">
+              <div
+                className={`w-20 h-20 rounded-2xl bg-gradient-to-tr ${selectedAvatar.color} flex items-center justify-center text-3xl shadow-xl ring-4 ring-amber-400/30 animate-bounce`}
+              >
                 {selectedAvatar.emoji}
               </div>
-              <span className="absolute -bottom-2 -right-2 text-2xl">🏆</span>
+              <span className="absolute -bottom-1 -right-1 text-xl">🏆</span>
             </div>
 
             <div>
-              <h2 className="text-xl sm:text-2xl font-black text-white">PETUALANGAN LABIRIN SELESAI!</h2>
-              <p className="text-xs text-amber-300 font-bold mt-1">
-                Luar Biasa! Seluruh Gerbang Bahasa Inggris Berhasil Dikuasai
+              <h2 className="text-lg sm:text-xl font-black text-white leading-tight">LABIRIN SELESAI!</h2>
+              <p className="text-[11px] text-amber-300 font-bold mt-0.5">
+                Hebat! Seluruh Gerbang Bahasa Inggris Berhasil Dikuasai
               </p>
             </div>
 
-            {/* Stars Rating */}
-            <div className="flex items-center justify-center gap-1.5 py-1">
-              <Star className="w-8 h-8 text-amber-400 fill-amber-400 animate-spin" />
-              <Star className={`w-9 h-9 ${timeSpent < 180 ? 'text-amber-400 fill-amber-400' : 'text-slate-600'}`} />
-              <Star className={`w-8 h-8 ${timeSpent < 90 ? 'text-amber-400 fill-amber-400' : 'text-slate-600'}`} />
+            {/* Stars */}
+            <div className="flex items-center justify-center gap-1 py-0.5">
+              <Star className="w-7 h-7 text-amber-400 fill-amber-400 animate-spin" />
+              <Star className={`w-8 h-8 ${timeSpent < 180 ? 'text-amber-400 fill-amber-400' : 'text-slate-600'}`} />
+              <Star className={`w-7 h-7 ${timeSpent < 90 ? 'text-amber-400 fill-amber-400' : 'text-slate-600'}`} />
             </div>
 
-            {/* Metrics Breakdown */}
-            <div className="grid grid-cols-3 gap-2 bg-slate-950 p-3.5 rounded-2xl border border-slate-800">
+            {/* Metrics */}
+            <div className="grid grid-cols-3 gap-1.5 bg-slate-950 p-2.5 rounded-2xl border border-slate-800">
               <div>
-                <p className="text-[10px] text-slate-400 font-bold">WAKTU</p>
-                <p className="text-sm sm:text-base font-extrabold text-amber-300 font-mono">
+                <p className="text-[9px] text-slate-400 font-bold">WAKTU</p>
+                <p className="text-xs sm:text-sm font-extrabold text-amber-300 font-mono">
                   {formatTime(timeSpent)}
                 </p>
               </div>
               <div>
-                <p className="text-[10px] text-slate-400 font-bold">GERBANG</p>
-                <p className="text-sm sm:text-base font-extrabold text-emerald-400 font-mono">
+                <p className="text-[9px] text-slate-400 font-bold">GERBANG</p>
+                <p className="text-xs sm:text-sm font-extrabold text-emerald-400 font-mono">
                   {unlockedGatesCount}/{totalGatesCount}
                 </p>
               </div>
               <div>
-                <p className="text-[10px] text-slate-400 font-bold">TOTAL SKOR</p>
-                <p className="text-sm sm:text-base font-extrabold text-indigo-300 font-mono">{score} XP</p>
+                <p className="text-[9px] text-slate-400 font-bold">TOTAL SKOR</p>
+                <p className="text-xs sm:text-sm font-extrabold text-indigo-300 font-mono">{score} XP</p>
               </div>
             </div>
 
-            {/* Action buttons */}
+            {/* Actions */}
             <div className="space-y-2 pt-1">
               <button
                 type="button"
                 onClick={handlePrintCertificate}
-                className="w-full py-3 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-extrabold text-xs rounded-xl shadow-lg transition-all flex items-center justify-center gap-2 cursor-pointer active:scale-98"
+                className="w-full py-2.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-black text-xs rounded-xl shadow-md transition-all flex items-center justify-center gap-1.5 cursor-pointer active:scale-98"
               >
-                <Printer className="w-4 h-4" />
-                <span>Cetak Sertifikat Petualang Labirin (A4)</span>
+                <Printer className="w-3.5 h-3.5" />
+                <span>Cetak Sertifikat Petualang (A4)</span>
               </button>
 
               <div className="flex gap-2">
                 <button
                   type="button"
                   onClick={() => initNewMaze()}
-                  className="flex-1 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs rounded-xl shadow-md transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+                  className="flex-1 py-2 bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs rounded-xl shadow-sm transition-all flex items-center justify-center gap-1 cursor-pointer"
                 >
-                  <RotateCcw className="w-3.5 h-3.5" />
+                  <RotateCcw className="w-3 h-3" />
                   <span>Main Lagi</span>
                 </button>
 
                 <button
                   type="button"
                   onClick={onBackToHome}
-                  className="flex-1 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-xs rounded-xl transition-all cursor-pointer"
+                  className="flex-1 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-xs rounded-xl transition-all cursor-pointer"
                 >
-                  Kembali ke Kuis
+                  Menu Kuis
                 </button>
               </div>
             </div>
@@ -1335,23 +1384,30 @@ export const MazeGameScreen: React.FC<MazeGameScreenProps> = ({
         </div>
       )}
 
-      {/* MODAL 3: PILIH AVATAR KARAKTER SISWA */}
+      {/* MODAL 4: PILIH AVATAR KARAKTER SISWA */}
       {showAvatarModal && (
-        <div className="fixed inset-0 z-50 bg-slate-950/85 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-slate-900 border border-slate-700 rounded-3xl max-w-md w-full p-6 shadow-2xl space-y-4 text-slate-100 animate-in fade-in zoom-in-95 duration-200">
+        <div className="fixed inset-0 z-50 bg-slate-950/85 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4">
+          <div className="bg-slate-900 border border-slate-700 rounded-3xl max-w-sm w-full p-5 shadow-2xl space-y-3.5 text-slate-100 animate-in fade-in zoom-in-95 duration-200">
             <div className="flex items-center justify-between pb-2 border-b border-slate-800">
               <div className="flex items-center gap-2">
-                <div className="w-8 h-8 rounded-xl bg-amber-500 text-slate-950 flex items-center justify-center font-bold text-sm">
+                <div className="w-7 h-7 rounded-xl bg-amber-500 text-slate-950 flex items-center justify-center font-bold text-xs">
                   🦸
                 </div>
                 <div>
-                  <h3 className="text-base font-bold text-white">Pilih Karakter Petualang</h3>
-                  <p className="text-xs text-slate-400">Pilih avatar favoritmu untuk menjelajahi labirin</p>
+                  <h3 className="text-sm font-bold text-white">Pilih Avatar Karakter</h3>
+                  <p className="text-[10px] text-slate-400">Pilih avatar kesukaanmu</p>
                 </div>
               </div>
+              <button
+                type="button"
+                onClick={() => setShowAvatarModal(false)}
+                className="p-1 rounded-lg bg-slate-800 text-slate-400 hover:text-white"
+              >
+                <X className="w-4 h-4" />
+              </button>
             </div>
 
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-2 gap-2.5">
               {MAZE_AVATARS.map((av) => {
                 const isSelected = selectedAvatar.id === av.id;
                 return (
@@ -1368,17 +1424,19 @@ export const MazeGameScreen: React.FC<MazeGameScreenProps> = ({
                       setShowAvatarModal(false);
                       if (!isSoundMuted) soundManager.playSuccessSound();
                     }}
-                    className={`p-3.5 rounded-2xl border-2 text-center transition-all cursor-pointer flex flex-col items-center justify-center gap-1.5 ${
+                    className={`p-3 rounded-2xl border-2 text-center transition-all cursor-pointer flex flex-col items-center justify-center gap-1 ${
                       isSelected
-                        ? 'border-indigo-500 bg-indigo-950/80 shadow-lg ring-2 ring-indigo-500/30'
+                        ? 'border-indigo-500 bg-indigo-950/80 shadow-md ring-2 ring-indigo-500/30'
                         : 'border-slate-800 bg-slate-950/50 hover:border-slate-700'
                     }`}
                   >
-                    <div className={`w-14 h-14 rounded-2xl bg-gradient-to-tr ${av.color} flex items-center justify-center text-3xl shadow-md`}>
+                    <div
+                      className={`w-12 h-12 rounded-2xl bg-gradient-to-tr ${av.color} flex items-center justify-center text-2xl shadow-sm`}
+                    >
                       {av.emoji}
                     </div>
-                    <span className="text-xs font-extrabold text-white mt-1">{av.name}</span>
-                    <span className="text-[10px] text-amber-300 font-semibold">{av.badge}</span>
+                    <span className="text-[11px] font-extrabold text-white mt-0.5">{av.name}</span>
+                    <span className="text-[9px] text-amber-300 font-semibold">{av.badge}</span>
                   </button>
                 );
               })}
@@ -1395,87 +1453,86 @@ export const MazeGameScreen: React.FC<MazeGameScreenProps> = ({
         </div>
       )}
 
-      {/* MODAL 4: PENGATURAN TINGKATAN KELAS & GURU */}
+      {/* MODAL 5: PENGATURAN TINGKATAN KELAS & UKURAN LABIRIN */}
       {showConfigModal && (
-        <div className="fixed inset-0 z-50 bg-slate-950/85 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-slate-900 border border-slate-700 rounded-3xl max-w-md w-full p-6 shadow-2xl space-y-5 text-slate-100 animate-in fade-in zoom-in-95 duration-200">
-            <div className="flex items-center justify-between pb-3 border-b border-slate-800">
+        <div className="fixed inset-0 z-50 bg-slate-950/85 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4">
+          <div className="bg-slate-900 border border-slate-700 rounded-3xl max-w-sm w-full p-5 shadow-2xl space-y-4 text-slate-100 animate-in fade-in zoom-in-95 duration-200">
+            <div className="flex items-center justify-between pb-2 border-b border-slate-800">
               <div className="flex items-center gap-2">
-                <div className="w-8 h-8 rounded-xl bg-indigo-600 flex items-center justify-center text-white">
+                <div className="w-7 h-7 rounded-xl bg-indigo-600 flex items-center justify-center text-white">
                   <Settings className="w-4 h-4" />
                 </div>
                 <div>
-                  <h3 className="text-base font-bold text-white">Pilih Tingkatan Kelas SMP</h3>
-                  <p className="text-xs text-slate-400">Pilih kurikulum materi Bahasa Inggris yang diujikan</p>
+                  <h3 className="text-sm font-bold text-white">Pilih Tingkatan Kelas SMP</h3>
+                  <p className="text-[10px] text-slate-400">Atur kurikulum soal yang diujikan</p>
                 </div>
               </div>
+              <button
+                type="button"
+                onClick={() => setShowConfigModal(false)}
+                className="p-1 rounded-lg bg-slate-800 text-slate-400 hover:text-white"
+              >
+                <X className="w-4 h-4" />
+              </button>
             </div>
 
             {/* Grade Selector */}
-            <div className="space-y-2">
-              <label className="block text-xs font-bold text-slate-300">
-                Pilih Tingkat Kelas:
-              </label>
-              <div className="grid grid-cols-3 gap-2">
+            <div className="space-y-1.5">
+              <label className="block text-[11px] font-bold text-slate-300">Tingkat Kelas:</label>
+              <div className="grid grid-cols-3 gap-1.5">
                 {[
-                  { id: '7', label: 'Kelas 7 SMP', desc: 'Introduction & Routines' },
-                  { id: '8', label: 'Kelas 8 SMP', desc: 'Recount Text & Modals' },
-                  { id: '9', label: 'Kelas 9 SMP', desc: 'Narrative & Passive' },
+                  { id: '7', label: 'Kelas 7' },
+                  { id: '8', label: 'Kelas 8' },
+                  { id: '9', label: 'Kelas 9' },
                 ].map((g) => (
                   <button
                     key={g.id}
                     type="button"
                     onClick={() => setSelectedGrade(g.id as SmpGradeLevel)}
-                    className={`p-3 rounded-2xl border-2 text-center transition-all cursor-pointer flex flex-col items-center justify-center gap-1 ${
+                    className={`py-2 rounded-xl border text-center transition-all cursor-pointer font-bold text-xs ${
                       selectedGrade === g.id
-                        ? 'border-indigo-500 bg-indigo-950/70 text-white shadow-md'
-                        : 'border-slate-800 bg-slate-950/50 text-slate-400 hover:border-slate-700 hover:text-slate-200'
+                        ? 'border-indigo-500 bg-indigo-950/70 text-white shadow-xs'
+                        : 'border-slate-800 bg-slate-950/50 text-slate-400 hover:border-slate-700'
                     }`}
                   >
-                    <span className="text-sm font-extrabold">{g.label}</span>
-                    <span className="text-[10px] text-slate-400 line-clamp-2 leading-tight">
-                      {g.desc}
-                    </span>
+                    {g.label}
                   </button>
                 ))}
               </div>
               <button
                 type="button"
                 onClick={() => setSelectedGrade('all')}
-                className={`w-full py-2 px-3 rounded-xl border text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
+                className={`w-full py-1.5 px-2 rounded-xl border text-[11px] font-bold transition-all cursor-pointer ${
                   selectedGrade === 'all'
                     ? 'border-indigo-500 bg-indigo-950/70 text-white'
-                    : 'border-slate-800 bg-slate-950/40 text-slate-400 hover:border-slate-700'
+                    : 'border-slate-800 bg-slate-950/40 text-slate-400'
                 }`}
               >
-                <span>Campuran Semua Tingkat (Kelas 7, 8, dan 9 SMP)</span>
+                Campuran Semua Kelas (7, 8, 9 SMP)
               </button>
             </div>
 
             {/* Difficulty Selector */}
-            <div className="space-y-2">
-              <label className="block text-xs font-bold text-slate-300">
-                Ukuran & Kerumitan Labirin:
-              </label>
-              <div className="grid grid-cols-3 gap-2">
+            <div className="space-y-1.5">
+              <label className="block text-[11px] font-bold text-slate-300">Ukuran Labirin:</label>
+              <div className="grid grid-cols-3 gap-1.5">
                 {[
-                  { id: 'easy', label: 'Mudah', size: '11 x 11', gates: '3 Gerbang' },
-                  { id: 'medium', label: 'Sedang', size: '15 x 15', gates: '4 Gerbang' },
-                  { id: 'hard', label: 'Tantangan', size: '19 x 19', gates: '5 Gerbang' },
+                  { id: 'easy', label: 'Mudah', size: '11x11' },
+                  { id: 'medium', label: 'Sedang', size: '15x15' },
+                  { id: 'hard', label: 'Tantangan', size: '19x19' },
                 ].map((d) => (
                   <button
                     key={d.id}
                     type="button"
                     onClick={() => setDifficulty(d.id as 'easy' | 'medium' | 'hard')}
-                    className={`p-2.5 rounded-2xl border text-center transition-all cursor-pointer flex flex-col items-center justify-center ${
+                    className={`p-2 rounded-xl border text-center transition-all cursor-pointer ${
                       difficulty === d.id
                         ? 'border-amber-500 bg-amber-950/50 text-amber-200 font-bold'
-                        : 'border-slate-800 bg-slate-950/40 text-slate-400 hover:border-slate-700'
+                        : 'border-slate-800 bg-slate-950/40 text-slate-400'
                     }`}
                   >
-                    <span className="text-xs font-bold">{d.label}</span>
-                    <span className="text-[10px] opacity-75">{d.size}</span>
-                    <span className="text-[9px] text-amber-400 font-medium">{d.gates}</span>
+                    <span className="text-[11px] font-bold block">{d.label}</span>
+                    <span className="text-[9px] opacity-75">{d.size}</span>
                   </button>
                 ))}
               </div>
@@ -1486,7 +1543,7 @@ export const MazeGameScreen: React.FC<MazeGameScreenProps> = ({
               <button
                 type="button"
                 onClick={() => setShowConfigModal(false)}
-                className="flex-1 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-xs rounded-xl cursor-pointer"
+                className="flex-1 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-xs rounded-xl"
               >
                 Batal
               </button>
@@ -1496,9 +1553,9 @@ export const MazeGameScreen: React.FC<MazeGameScreenProps> = ({
                   setShowConfigModal(false);
                   initNewMaze(selectedGrade, difficulty);
                 }}
-                className="flex-1 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs rounded-xl shadow-md cursor-pointer"
+                className="flex-1 py-2 bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs rounded-xl shadow-sm"
               >
-                Terapkan & Mulai Ulang
+                Terapkan
               </button>
             </div>
           </div>
