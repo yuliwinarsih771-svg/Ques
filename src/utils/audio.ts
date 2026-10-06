@@ -210,6 +210,65 @@ class SoundEffects {
     }
   }
 
+  // Card flip swoosh sound
+  playCardFlipSound() {
+    try {
+      this.initCtx();
+      if (!this.ctx) return;
+      this.safeResume();
+      const ctx = this.ctx;
+      const now = ctx.currentTime;
+
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'triangle';
+      osc.frequency.setValueAtTime(320, now);
+      osc.frequency.exponentialRampToValueAtTime(680, now + 0.06);
+
+      gain.gain.setValueAtTime(0.06, now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.06);
+
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start(now);
+      osc.stop(now + 0.06);
+    } catch {
+      // Ignore
+    }
+  }
+
+  // Card match chime sound
+  playCardMatchSound() {
+    try {
+      this.initCtx();
+      if (!this.ctx) return;
+      this.safeResume();
+      const ctx = this.ctx;
+      const now = ctx.currentTime;
+
+      const freqs = [523.25, 659.25, 783.99, 1046.5];
+      freqs.forEach((freq, idx) => {
+        const time = now + idx * 0.06;
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(freq, time);
+
+        gain.gain.setValueAtTime(0.08, time);
+        gain.gain.exponentialRampToValueAtTime(0.001, time + 0.18);
+
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+
+        osc.start(time);
+        osc.stop(time + 0.18);
+      });
+    } catch {
+      // Ignore
+    }
+  }
+
   // Error buzz sound
   playErrorSound() {
     try {

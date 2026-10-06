@@ -6,6 +6,7 @@ interface NavbarProps {
   onOpenStudyModal: () => void;
   onOpenMazeGame?: () => void;
   onOpenSnakeLadder?: () => void;
+  onOpenPictureMatch?: () => void;
   isStudyLocked?: boolean;
 }
 
@@ -14,6 +15,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   onOpenStudyModal,
   onOpenMazeGame,
   onOpenSnakeLadder,
+  onOpenPictureMatch,
   isStudyLocked = false,
 }) => {
   return (
@@ -60,6 +62,19 @@ export const Navbar: React.FC<NavbarProps> = ({
                 <Gamepad2 className="w-3.5 h-3.5 text-amber-600" />
                 <span className="hidden sm:inline">Labirin SMP</span>
                 <span className="sm:hidden">Labirin</span>
+              </button>
+            )}
+
+            {onOpenPictureMatch && (
+              <button
+                type="button"
+                onClick={onOpenPictureMatch}
+                className="inline-flex items-center gap-1.5 px-2.5 py-1 sm:px-3 sm:py-1.5 text-[11px] sm:text-xs font-extrabold text-rose-900 bg-rose-50 hover:bg-rose-100 border border-rose-300 rounded-xl shadow-xs transition-all active:scale-95 cursor-pointer"
+                title="Mainkan Game Tebak Gambar & Pencocokan Kosakata Bahasa Inggris SMP"
+              >
+                <span>🖼️</span>
+                <span className="hidden sm:inline">Tebak Gambar</span>
+                <span className="sm:hidden">Gambar</span>
               </button>
             )}
 

@@ -210,6 +210,41 @@ export interface SnakeLadderRecord {
   completedAt: string;
 }
 
+export type PictureMatchCategory =
+  | 'all'
+  | 'animals'
+  | 'school'
+  | 'food'
+  | 'jobs'
+  | 'actions'
+  | 'science';
+
+export interface PictureCardItem {
+  id: string;
+  word: string; // English word
+  translation: string; // Indonesian meaning
+  emoji: string; // Illustration emoji e.g. 🦁, 🔬, 👨‍🍳
+  category: 'animals' | 'school' | 'food' | 'jobs' | 'actions' | 'science';
+  grade: '7' | '8' | '9';
+  exampleSentence: string;
+  color: string;
+}
+
+export interface PictureMatchRecord {
+  id: string;
+  studentName: string;
+  className: string;
+  gradePlayed: SmpGradeLevel;
+  category: PictureMatchCategory;
+  difficulty: 'easy' | 'medium' | 'hard';
+  pairsCount: number;
+  timeSpentSeconds: number;
+  mistakesCount: number;
+  starsCount: number;
+  score: number;
+  completedAt: string;
+}
+
 export const DEFAULT_KOP_SURAT: KopSuratConfig = {
   instansiInduk: 'PEMERINTAH DAERAH DINAS PENDIDIKAN',
   dinasPendidikan: 'DINAS PENDIDIKAN DAN KEBUDAYAAN',

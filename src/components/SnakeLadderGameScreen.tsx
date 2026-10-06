@@ -41,6 +41,7 @@ import {
   getSnakeLadderQuestion,
   getBoardTilesZigZag,
 } from '../data/snakeLadderData';
+import { SnakeLadderBoardView } from './SnakeLadderBoardView';
 import { soundManager } from '../utils/audio';
 
 interface SnakeLadderGameScreenProps {
@@ -50,6 +51,7 @@ interface SnakeLadderGameScreenProps {
   onOpenTeacherPin: () => void;
   initialGrade?: SmpGradeLevel;
   onSaveRecord?: (record: SnakeLadderRecord) => void;
+  customQuestions?: MazeQuestion[];
 }
 
 export const SnakeLadderGameScreen: React.FC<SnakeLadderGameScreenProps> = ({
@@ -59,6 +61,7 @@ export const SnakeLadderGameScreen: React.FC<SnakeLadderGameScreenProps> = ({
   onOpenTeacherPin,
   initialGrade = '7',
   onSaveRecord,
+  customQuestions,
 }) => {
   // Game Setup Stage vs Playing Stage
   const [gameState, setGameState] = useState<'setup' | 'playing' | 'gameover'>('setup');
@@ -100,6 +103,7 @@ export const SnakeLadderGameScreen: React.FC<SnakeLadderGameScreenProps> = ({
   const [isMoving, setIsMoving] = useState(false);
   const [hasBonusRoll, setHasBonusRoll] = useState(false);
   const [roundsCount, setRoundsCount] = useState(1);
+  const [isGraphicMode, setIsGraphicMode] = useState(false);
 
   // Interactive Question Modal State
   const [activeQuestion, setActiveQuestion] = useState<{
@@ -371,7 +375,7 @@ export const SnakeLadderGameScreen: React.FC<SnakeLadderGameScreenProps> = ({
         const topPos = LADDERS_MAP[finalPos];
         if (config.requireCorrectToClimb && !curPlayer.isBot) {
           // Trigger English Question to climb!
-          const q = getSnakeLadderQuestion(config.activeGrade, usedQuestionsRef.current);
+          const q = getSnakeLadderQuestion(config.activeGrade, usedQuestionsRef.current, customQuestions);
           usedQuestionsRef.current.add(q.id);
 
           setActiveQuestion({
@@ -395,7 +399,7 @@ export const SnakeLadderGameScreen: React.FC<SnakeLadderGameScreenProps> = ({
         const tailPos = SNAKES_MAP[finalPos];
         if (config.snakeShieldOnCorrect && !curPlayer.isBot) {
           // Trigger English Question for Shield!
-          const q = getSnakeLadderQuestion(config.activeGrade, usedQuestionsRef.current);
+          const q = getSnakeLadderQuestion(config.activeGrade, usedQuestionsRef.current, customQuestions);
           usedQuestionsRef.current.add(q.id);
 
           setActiveQuestion({
@@ -416,7 +420,7 @@ export const SnakeLadderGameScreen: React.FC<SnakeLadderGameScreenProps> = ({
 
       // Check Dedicated Question Tile ⭐
       if (QUESTION_TILES.has(finalPos) && !curPlayer.isBot) {
-        const q = getSnakeLadderQuestion(config.activeGrade, usedQuestionsRef.current);
+        const q = getSnakeLadderQuestion(config.activeGrade, usedQuestionsRef.current, customQuestions);
         usedQuestionsRef.current.add(q.id);
 
         setActiveQuestion({
@@ -433,7 +437,7 @@ export const SnakeLadderGameScreen: React.FC<SnakeLadderGameScreenProps> = ({
       // Normal tile -> finish turn and pass to next player
       advanceTurn(gotSix);
     },
-    [advanceTurn, climbLadderDirect, config.activeGrade, config.requireCorrectToClimb, config.snakeShieldOnCorrect, slideDownSnakeDirect]
+    [advanceTurn, climbLadderDirect, config.activeGrade, config.requireCorrectToClimb, config.snakeShieldOnCorrect, customQuestions, slideDownSnakeDirect]
   );
 
   // Step-by-step moving animation
@@ -1182,95 +1186,50 @@ export const SnakeLadderGameScreen: React.FC<SnakeLadderGameScreenProps> = ({
           {/* Grid Layout: Left is 10x10 Board, Right is Controller & Live HUD */}
           <div className="flex flex-col lg:flex-row items-center justify-center gap-4 w-full">
             {/* The 100-tile Board */}
-            <div className="bg-slate-950 p-2 sm:p-3 rounded-3xl border-2 border-slate-800 shadow-2xl relative select-none">
-              <div className="grid grid-cols-10 gap-1 sm:gap-1.5 bg-slate-900 p-2 rounded-2xl border border-slate-800">
-                {boardRows.map((row) =>
-                  row.map((tileNum) => {
-                    const isLadder = LADDERS_MAP[tileNum] !== undefined;
-                    const ladderTarget = LADDERS_MAP[tileNum];
-                    const isSnake = SNAKES_MAP[tileNum] !== undefined;
-                    const snakeTarget = SNAKES_MAP[tileNum];
-                    const isQuestion = QUESTION_TILES.has(tileNum);
-                    const isFinish = tileNum === 100;
-                    const isStart = tileNum === 1;
+            <div className="bg-slate-950 p-2 sm:p-3 rounded-3xl border-2 border-slate-800 shadow-2xl relative select-none w-full max-w-[540px] sm:max-w-[580px] flex flex-col items-center">
+              {/* Header inside Board Frame: Title & View Mode Toggle */}
+              <div className="w-full flex items-center justify-between pb-2 px-1 text-xs">
+                <div className="flex items-center gap-2">
+                  <span className="font-extrabold text-white flex items-center gap-1.5">
+                    <span>🎲 Papan Ular Tangga</span>
+                    <span className="text-[10px] bg-teal-500/20 text-teal-300 border border-teal-500/40 px-1.5 py-0.5 rounded-full font-bold">
+                      100 Petak
+                    </span>
+                  </span>
+                </div>
 
-                    // Players currently on this tile
-                    const playersHere = players.filter((p) => p.position === tileNum);
-
-                    return (
-                      <div
-                        key={tileNum}
-                        className={`relative w-8 h-8 sm:w-11 sm:h-11 rounded-lg sm:rounded-xl border flex flex-col justify-between p-0.5 sm:p-1 transition-all ${
-                          isFinish
-                            ? 'bg-gradient-to-tr from-amber-500 to-yellow-400 border-amber-300 text-slate-950 shadow-md ring-2 ring-amber-400/40'
-                            : isStart
-                            ? 'bg-emerald-950/80 border-emerald-500 text-emerald-300'
-                            : isLadder
-                            ? 'bg-teal-950/70 border-teal-500/60 text-teal-200'
-                            : isSnake
-                            ? 'bg-rose-950/70 border-rose-500/60 text-rose-200'
-                            : isQuestion
-                            ? 'bg-indigo-950/60 border-indigo-500/50 text-indigo-300'
-                            : tileNum % 2 === 0
-                            ? 'bg-slate-950/90 border-slate-800/80 text-slate-400'
-                            : 'bg-slate-900/70 border-slate-800/60 text-slate-400'
-                        }`}
-                      >
-                        {/* Tile Number & Badges */}
-                        <div className="flex items-center justify-between leading-none">
-                          <span
-                            className={`text-[8px] sm:text-[10px] font-black ${
-                              isFinish ? 'text-slate-950 font-black' : 'text-slate-500'
-                            }`}
-                          >
-                            {tileNum}
-                          </span>
-
-                          {/* Tile Badge icon */}
-                          {isFinish && <span className="text-xs">🏆</span>}
-                          {isLadder && (
-                            <span className="text-[10px] text-teal-400 font-bold" title={`Naik ke ${ladderTarget}`}>
-                              🪜
-                            </span>
-                          )}
-                          {isSnake && (
-                            <span className="text-[10px] text-rose-400 font-bold" title={`Turun ke ${snakeTarget}`}>
-                              🐍
-                            </span>
-                          )}
-                          {isQuestion && (
-                            <span className="text-[10px] text-amber-400 font-bold" title="Tantangan Soal Kuis">
-                              ⭐
-                            </span>
-                          )}
-                        </div>
-
-                        {/* Players on Tile */}
-                        <div className="flex items-center justify-center gap-0.5 z-10">
-                          {playersHere.map((p) => (
-                            <div
-                              key={p.id}
-                              className={`w-4 h-4 sm:w-6 sm:h-6 rounded-full bg-gradient-to-tr ${p.color} border border-white flex items-center justify-center text-[9px] sm:text-xs shadow-md animate-in zoom-in-75`}
-                              title={`${p.name} (${p.position})`}
-                            >
-                              {p.avatar}
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    );
-                  })
-                )}
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setIsGraphicMode(!isGraphicMode)}
+                    className="px-2.5 py-1 bg-slate-900 hover:bg-slate-800 border border-slate-700 rounded-xl text-[11px] font-bold text-slate-300 hover:text-white transition-all cursor-pointer flex items-center gap-1 shadow-xs"
+                    title="Beralih antara Mode Ilustrasi Vektor dan Mode Gambar Cetak"
+                  >
+                    <span>{isGraphicMode ? '🎨 Mode Vektor' : '🖼️ Gambar Cetak'}</span>
+                  </button>
+                </div>
               </div>
 
+              {/* The Dedicated Board View matching user's image */}
+              <SnakeLadderBoardView
+                players={players}
+                currentPlayerIndex={currentPlayerIndex}
+                isGraphicMode={isGraphicMode}
+              />
+
               {/* Legend footer */}
-              <div className="mt-2.5 flex items-center justify-between text-[10px] text-slate-400 px-1">
-                <span className="flex items-center gap-2">
-                  <span className="text-teal-400 font-bold">🪜 Tangga (Naik)</span>
-                  <span className="text-rose-400 font-bold">🐍 Ular (Turun)</span>
-                  <span className="text-amber-400 font-bold">⭐ Soal Kuis</span>
-                </span>
-                <span className="text-slate-500">Putaran: #{roundsCount}</span>
+              <div className="mt-2.5 w-full flex items-center justify-between text-[10.5px] text-slate-400 px-1">
+                <div className="flex items-center gap-2.5 flex-wrap">
+                  <span className="text-teal-400 font-bold flex items-center gap-1">
+                    <span>🪜 Tangga:</span>
+                    <span className="text-slate-300 text-[10px]">4→16, 13→34, 33→49, 42→63, 50→69, 62→81, 74→92</span>
+                  </span>
+                  <span className="text-rose-400 font-bold flex items-center gap-1">
+                    <span>🐍 Ular:</span>
+                    <span className="text-slate-300 text-[10px]">99→41, 89→53, 76→58, 66→45...</span>
+                  </span>
+                </div>
+                <span className="text-slate-500 font-mono shrink-0">Putaran #{roundsCount}</span>
               </div>
             </div>
 
@@ -1294,53 +1253,50 @@ export const SnakeLadderGameScreen: React.FC<SnakeLadderGameScreenProps> = ({
                 </div>
               </div>
 
-              {/* 3D Interactive Dice Area */}
+              {/* 3D Interactive Dice Area (Click dice directly to roll) */}
               <div className="flex flex-col items-center justify-center p-4 bg-slate-900/80 rounded-3xl border border-slate-800 w-full space-y-3">
                 {/* Clickable 3D Dice Box */}
                 <div
                   onClick={() => {
                     if (!isTurnDisabled) handleUserRoll();
                   }}
-                  className={`transition-all duration-300 transform select-none ${
-                    isRolling ? 'rotate-[720deg] scale-110 cursor-wait' : isTurnDisabled ? 'cursor-not-allowed opacity-90' : 'cursor-pointer hover:scale-105 active:scale-95'
+                  className={`relative transition-all duration-300 transform select-none p-1 rounded-2xl ${
+                    isRolling
+                      ? 'rotate-[720deg] scale-110 cursor-wait'
+                      : isTurnDisabled
+                      ? 'cursor-not-allowed opacity-80'
+                      : 'cursor-pointer hover:scale-110 active:scale-95 group'
                   }`}
-                  title={isHumanTurn ? 'Klik Dadu atau Tekan Spasi untuk Mengocok!' : 'Menunggu giliran'}
+                  title={isHumanTurn ? 'Klik Dadu untuk Mengocok (atau Tekan Spasi)!' : 'Menunggu giliran...'}
                 >
+                  {/* Glowing pulse ring around dice when it's human player's turn */}
+                  {isHumanTurn && !isTurnDisabled && (
+                    <div className="absolute inset-0 rounded-2xl bg-teal-400/40 blur-md animate-pulse pointer-events-none" />
+                  )}
                   {renderDiceCube(diceNumber)}
                 </div>
 
-                <div className="text-center">
+                <div className="text-center space-y-0.5">
                   <span className="text-xs font-black text-slate-200 block">
-                    {isRolling ? 'Mengocok Dadu...' : isMoving ? 'Pion Sedang Berjalan...' : `Angka Dadu Terakhir: ${diceNumber}`}
+                    {isRolling
+                      ? '🎲 Mengocok Dadu...'
+                      : isMoving
+                      ? '🚶 Pion Sedang Berjalan...'
+                      : currentPlayer?.isBot
+                      ? '🤖 Bot Sedang Berpikir...'
+                      : `Angka Dadu: ${diceNumber}`}
                   </span>
+                  {isHumanTurn && !isTurnDisabled && (
+                    <span className="text-[11px] font-bold text-teal-400 block animate-pulse">
+                      👉 Ketuk Dadu di Atas untuk Melempar
+                    </span>
+                  )}
                   {hasBonusRoll && (
                     <span className="text-[11px] font-black text-amber-400 block animate-bounce mt-0.5">
                       ★ Bonus Lemparan Sekali Lagi! ★
                     </span>
                   )}
                 </div>
-
-                {/* Roll Dice Button */}
-                <button
-                  type="button"
-                  disabled={isTurnDisabled}
-                  onClick={handleUserRoll}
-                  className={`w-full py-3.5 rounded-2xl font-black text-xs shadow-lg transition-all flex items-center justify-center gap-2 cursor-pointer active:scale-95 ${
-                    isTurnDisabled
-                      ? 'bg-slate-800 text-slate-500 cursor-not-allowed border border-slate-700'
-                      : 'bg-gradient-to-r from-teal-500 via-emerald-500 to-indigo-600 hover:from-teal-400 hover:to-indigo-500 text-slate-950 ring-2 ring-teal-400/40 animate-pulse'
-                  }`}
-                >
-                  <span>
-                    {isRolling
-                      ? 'Mengocok Dadu...'
-                      : isMoving
-                      ? 'Melangkah di Papan...'
-                      : currentPlayer?.isBot
-                      ? 'Bot Sedang Berpikir...'
-                      : 'Kocok Dadu! (Klik / Tekan Spasi) 🎲'}
-                  </span>
-                </button>
               </div>
 
               {/* Player Rankings List */}

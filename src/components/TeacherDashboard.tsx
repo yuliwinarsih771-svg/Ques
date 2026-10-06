@@ -35,6 +35,8 @@ import {
   Gamepad2,
   Key,
   Star,
+  Dice6,
+  Image as ImageIcon,
 } from 'lucide-react';
 import {
   StudentSubmission,
@@ -48,12 +50,17 @@ import {
   MazeConfig,
   MazeCompletionRecord,
   SmpGradeLevel,
+  MazeQuestion,
+  PictureCardItem,
+  PictureMatchRecord,
 } from '../types';
 import { SMP_MAZE_QUESTIONS, DEFAULT_MAZE_CONFIG } from '../data/mazeData';
 import { exportRecapToExcel, printClassRecap, printSingleStudentCertificate } from '../utils/printReport';
 import { TeacherInputStudent } from './TeacherInputStudent';
 import { AiQuestionGenerator } from './AiQuestionGenerator';
 import { KopSuratSettings } from './KopSuratSettings';
+import { TeacherSnakeLadderQuestions } from './TeacherSnakeLadderQuestions';
+import { TeacherPictureCards } from './TeacherPictureCards';
 
 interface TeacherDashboardProps {
   submissions: StudentSubmission[];
@@ -68,6 +75,13 @@ interface TeacherDashboardProps {
   onClearMazeCompletions?: () => void;
   onOpenMazePlay?: () => void;
   onOpenSnakeLadderPlay?: () => void;
+  onOpenPictureMatchPlay?: () => void;
+  snakeLadderQuestions?: MazeQuestion[];
+  onSaveSnakeLadderQuestions?: (questions: MazeQuestion[]) => void;
+  pictureCards?: PictureCardItem[];
+  onSavePictureCards?: (cards: PictureCardItem[]) => void;
+  pictureMatchRecords?: PictureMatchRecord[];
+  onClearPictureMatchRecords?: () => void;
   onSaveSettings: (settings: QuizSettings) => void;
   onSaveMaster: (students: StudentMasterData[]) => void;
   onSaveQuestions: (questions: Question[]) => void;
@@ -89,6 +103,13 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
   onClearMazeCompletions,
   onOpenMazePlay,
   onOpenSnakeLadderPlay,
+  onOpenPictureMatchPlay,
+  snakeLadderQuestions = [],
+  onSaveSnakeLadderQuestions,
+  pictureCards = [],
+  onSavePictureCards,
+  pictureMatchRecords = [],
+  onClearPictureMatchRecords,
   onSaveSettings,
   onSaveMaster,
   onSaveQuestions,
@@ -96,7 +117,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
   onClearAllSubmissions,
   onClose,
 }) => {
-  const [activeTab, setActiveTab] = useState<'rekap' | 'buat-soal-ai' | 'input-siswa' | 'analisis' | 'pengaturan' | 'kop-surat' | 'monitoring' | 'game-labirin'>('rekap');
+  const [activeTab, setActiveTab] = useState<'rekap' | 'buat-soal-ai' | 'input-siswa' | 'analisis' | 'pengaturan' | 'kop-surat' | 'monitoring' | 'game-labirin' | 'bank-ular-tangga' | 'bank-tebak-gambar'>('rekap');
   const [selectedClass, setSelectedClass] = useState<string>('Semua Kelas');
   const [searchTerm, setSearchTerm] = useState('');
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
@@ -455,6 +476,54 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                   <span className="flex-1 truncate">Game Labirin SMP</span>
                   <span className="text-[9px] bg-amber-500/20 text-amber-300 border border-amber-500/40 px-1 rounded font-bold">
                     Kelas {mazeConfig.activeGrade === 'all' ? '7-9' : mazeConfig.activeGrade}
+                  </span>
+                </>
+              )}
+            </button>
+
+            {/* 9. Bank Soal Ular Tangga */}
+            <button
+              onClick={() => {
+                setActiveTab('bank-ular-tangga');
+                setIsMobileMenuOpen(false);
+              }}
+              className={`w-full px-3 py-2 text-xs flex items-center justify-start gap-2.5 transition-all text-left ${
+                activeTab === 'bank-ular-tangga'
+                  ? 'bg-[#2271b1] text-white font-bold'
+                  : 'text-[#c3c4c7] hover:bg-[#13171a] hover:text-[#72aee6]'
+              }`}
+              title="Bank Soal Ular Tangga (Bisa Diedit Guru)"
+            >
+              <Dice6 className="w-4 h-4 shrink-0 text-teal-400" />
+              {!isSidebarCollapsed && (
+                <>
+                  <span className="flex-1 truncate">Soal Ular Tangga</span>
+                  <span className="text-[9px] bg-teal-500/20 text-teal-300 border border-teal-500/40 px-1 rounded font-bold">
+                    Edit
+                  </span>
+                </>
+              )}
+            </button>
+
+            {/* 10. Bank Soal Tebak Gambar */}
+            <button
+              onClick={() => {
+                setActiveTab('bank-tebak-gambar');
+                setIsMobileMenuOpen(false);
+              }}
+              className={`w-full px-3 py-2 text-xs flex items-center justify-start gap-2.5 transition-all text-left ${
+                activeTab === 'bank-tebak-gambar'
+                  ? 'bg-[#2271b1] text-white font-bold'
+                  : 'text-[#c3c4c7] hover:bg-[#13171a] hover:text-[#72aee6]'
+              }`}
+              title="Bank Soal Tebak Gambar (Bisa Diedit Guru)"
+            >
+              <ImageIcon className="w-4 h-4 shrink-0 text-rose-400" />
+              {!isSidebarCollapsed && (
+                <>
+                  <span className="flex-1 truncate">Soal Tebak Gambar</span>
+                  <span className="text-[9px] bg-rose-500/20 text-rose-300 border border-rose-500/40 px-1 rounded font-bold">
+                    Edit
                   </span>
                 </>
               )}
@@ -1034,6 +1103,16 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                   <span>Main Labirin</span>
                 </button>
               )}
+
+              {onOpenPictureMatchPlay && (
+                <button
+                  type="button"
+                  onClick={onOpenPictureMatchPlay}
+                  className="px-3.5 py-2 bg-gradient-to-r from-rose-500 via-purple-500 to-indigo-600 hover:from-rose-600 hover:to-indigo-700 text-white font-extrabold text-xs rounded-xl shadow-md transition-all flex items-center gap-1.5 cursor-pointer active:scale-95"
+                >
+                  <span>🖼️ Tebak Gambar</span>
+                </button>
+              )}
             </div>
           </div>
 
@@ -1334,6 +1413,26 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
             )}
           </div>
         </div>
+      )}
+
+      {/* Tab Content: Bank Soal Ular Tangga */}
+      {activeTab === 'bank-ular-tangga' && (
+        <TeacherSnakeLadderQuestions
+          questions={snakeLadderQuestions}
+          onSaveQuestions={onSaveSnakeLadderQuestions || (() => {})}
+          onOpenSnakeLadderPlay={onOpenSnakeLadderPlay}
+        />
+      )}
+
+      {/* Tab Content: Bank Soal Tebak Gambar */}
+      {activeTab === 'bank-tebak-gambar' && (
+        <TeacherPictureCards
+          cards={pictureCards}
+          onSaveCards={onSavePictureCards || (() => {})}
+          records={pictureMatchRecords}
+          onClearRecords={onClearPictureMatchRecords}
+          onOpenPictureMatchPlay={onOpenPictureMatchPlay}
+        />
       )}
         </main>
       </div>

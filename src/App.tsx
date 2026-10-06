@@ -21,6 +21,9 @@ import {
   MazeConfig,
   MazeCompletionRecord,
   SnakeLadderRecord,
+  MazeQuestion,
+  PictureMatchRecord,
+  PictureCardItem,
   KopSuratConfig,
   DEFAULT_KOP_SURAT,
 } from './types';
@@ -32,6 +35,9 @@ import {
   INITIAL_PROCEDURE_TEXTS,
 } from './data/quizData';
 import { DEFAULT_MAZE_CONFIG } from './data/mazeData';
+import { DEFAULT_SNAKE_LADDER_QUESTIONS } from './data/snakeLadderData';
+import { PICTURE_MATCH_ITEMS } from './data/pictureMatchData';
+import { PictureMatchGameScreen } from './components/PictureMatchGameScreen';
 import { soundManager } from './utils/audio';
 
 const STORAGE_KEYS = {
@@ -46,6 +52,9 @@ const STORAGE_KEYS = {
   MAZE_CONFIG: 'eduquiz_maze_config',
   MAZE_COMPLETIONS: 'quiz_maze_completions_v2',
   SNAKE_LADDER_RECORDS: 'quiz_snake_ladder_records_v2',
+  SNAKE_LADDER_QUESTIONS: 'quiz_snake_ladder_questions_v2',
+  PICTURE_MATCH_RECORDS: 'quiz_picture_match_records_v2',
+  PICTURE_CARDS: 'quiz_picture_cards_v2',
   KOP_SURAT: 'eduquiz_kop_surat',
 };
 
@@ -76,8 +85,8 @@ const ensureUniqueQuestionIds = (qs: Question[]): Question[] => {
 };
 
 export default function App() {
-  // Screen state: 'start' | 'quiz' | 'result' | 'teacher' | 'maze' | 'snake_ladder'
-  const [currentScreen, setCurrentScreen] = useState<'start' | 'quiz' | 'result' | 'teacher' | 'maze' | 'snake_ladder'>('start');
+  // Screen state: 'start' | 'quiz' | 'result' | 'teacher' | 'maze' | 'snake_ladder' | 'picture_match'
+  const [currentScreen, setCurrentScreen] = useState<'start' | 'quiz' | 'result' | 'teacher' | 'maze' | 'snake_ladder' | 'picture_match'>('start');
 
   // Master states with localStorage persistence
   const [submissions, setSubmissions] = useState<StudentSubmission[]>(() => {
@@ -217,6 +226,87 @@ export default function App() {
       localStorage.removeItem(STORAGE_KEYS.SNAKE_LADDER_RECORDS);
     } catch {
       // Ignore
+    }
+  };
+
+  // Editable Question Bank for Snakes and Ladders
+  const [snakeLadderQuestions, setSnakeLadderQuestions] = useState<MazeQuestion[]>(() => {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEYS.SNAKE_LADDER_QUESTIONS);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return parsed;
+        }
+      }
+    } catch {
+      // ignore
+    }
+    return DEFAULT_SNAKE_LADDER_QUESTIONS;
+  });
+
+  const handleSaveSnakeLadderQuestions = (updated: MazeQuestion[]) => {
+    setSnakeLadderQuestions(updated);
+    try {
+      localStorage.setItem(STORAGE_KEYS.SNAKE_LADDER_QUESTIONS, JSON.stringify(updated));
+    } catch {
+      // ignore
+    }
+  };
+
+  // Picture Match Records
+  const [pictureMatchRecords, setPictureMatchRecords] = useState<PictureMatchRecord[]>(() => {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEYS.PICTURE_MATCH_RECORDS);
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
+
+  const handleSavePictureMatchRecord = (record: PictureMatchRecord) => {
+    setPictureMatchRecords((prev) => [record, ...prev]);
+    try {
+      localStorage.setItem(
+        STORAGE_KEYS.PICTURE_MATCH_RECORDS,
+        JSON.stringify([record, ...pictureMatchRecords])
+      );
+    } catch {
+      // ignore
+    }
+  };
+
+  const handleClearPictureMatchRecords = () => {
+    setPictureMatchRecords([]);
+    try {
+      localStorage.removeItem(STORAGE_KEYS.PICTURE_MATCH_RECORDS);
+    } catch {
+      // ignore
+    }
+  };
+
+  // Picture Cards editable by teacher
+  const [pictureCards, setPictureCards] = useState<PictureCardItem[]>(() => {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEYS.PICTURE_CARDS);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return parsed;
+        }
+      }
+    } catch {
+      // ignore
+    }
+    return PICTURE_MATCH_ITEMS;
+  });
+
+  const handleSavePictureCards = (updated: PictureCardItem[]) => {
+    setPictureCards(updated);
+    try {
+      localStorage.setItem(STORAGE_KEYS.PICTURE_CARDS, JSON.stringify(updated));
+    } catch {
+      // ignore
     }
   };
 
@@ -400,7 +490,8 @@ export default function App() {
     currentScreen === 'quiz' ||
     currentScreen === 'teacher' ||
     currentScreen === 'maze' ||
-    currentScreen === 'snake_ladder';
+    currentScreen === 'snake_ladder' ||
+    currentScreen === 'picture_match';
 
   return (
     <div
@@ -415,6 +506,7 @@ export default function App() {
           onOpenStudyModal={handleOpenStudyModal}
           onOpenMazeGame={() => setCurrentScreen('maze')}
           onOpenSnakeLadder={() => setCurrentScreen('snake_ladder')}
+          onOpenPictureMatch={() => setCurrentScreen('picture_match')}
           isStudyLocked={hasViewedStudy}
         />
       )}
@@ -435,6 +527,10 @@ export default function App() {
             onOpenSnakeLadder={(prof) => {
               if (prof) setActiveProfile(prof);
               setCurrentScreen('snake_ladder');
+            }}
+            onOpenPictureMatch={(prof) => {
+              if (prof) setActiveProfile(prof);
+              setCurrentScreen('picture_match');
             }}
             isStudyLocked={hasViewedStudy}
           />
@@ -479,6 +575,13 @@ export default function App() {
             onClearMazeCompletions={handleClearMazeCompletions}
             onOpenMazePlay={() => setCurrentScreen('maze')}
             onOpenSnakeLadderPlay={() => setCurrentScreen('snake_ladder')}
+            onOpenPictureMatchPlay={() => setCurrentScreen('picture_match')}
+            snakeLadderQuestions={snakeLadderQuestions}
+            onSaveSnakeLadderQuestions={handleSaveSnakeLadderQuestions}
+            pictureCards={pictureCards}
+            onSavePictureCards={handleSavePictureCards}
+            pictureMatchRecords={pictureMatchRecords}
+            onClearPictureMatchRecords={handleClearPictureMatchRecords}
             onSaveSettings={setSettings}
             onSaveMaster={setStudentsMaster}
             onSaveQuestions={handleSaveQuestions}
@@ -507,6 +610,19 @@ export default function App() {
             onOpenTeacherPin={() => setIsPinModalOpen(true)}
             initialGrade={mazeConfig.activeGrade}
             onSaveRecord={handleSaveSnakeLadderRecord}
+            customQuestions={snakeLadderQuestions}
+          />
+        )}
+
+        {currentScreen === 'picture_match' && (
+          <PictureMatchGameScreen
+            studentProfile={activeProfile}
+            kopSurat={kopSurat}
+            onBackToHome={() => setCurrentScreen('start')}
+            onOpenTeacherPin={() => setIsPinModalOpen(true)}
+            initialGrade={mazeConfig.activeGrade}
+            onSaveRecord={handleSavePictureMatchRecord}
+            customCards={pictureCards}
           />
         )}
       </main>

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Play, Sparkles, BookOpen, Clock, AlertTriangle, ShieldCheck, UserCheck, Lock, Gamepad2, Dice6 } from 'lucide-react';
+import { Play, Sparkles, BookOpen, Clock, AlertTriangle, ShieldCheck, UserCheck, Lock, Gamepad2, Dice6, Image as ImageIcon } from 'lucide-react';
 import { QuizSettings, StudentProfile, StudentMasterData, StudentSubmission } from '../types';
 
 interface StartScreenProps {
@@ -10,6 +10,7 @@ interface StartScreenProps {
   onOpenStudyModal: () => void;
   onOpenMazeGame?: (profile?: StudentProfile) => void;
   onOpenSnakeLadder?: (profile?: StudentProfile) => void;
+  onOpenPictureMatch?: (profile?: StudentProfile) => void;
   isStudyLocked: boolean;
 }
 
@@ -21,6 +22,7 @@ export const StartScreen: React.FC<StartScreenProps> = ({
   onOpenStudyModal,
   onOpenMazeGame,
   onOpenSnakeLadder,
+  onOpenPictureMatch,
   isStudyLocked,
 }) => {
   const defaultClass = React.useMemo(() => {
@@ -377,6 +379,29 @@ export const StartScreen: React.FC<StartScreenProps> = ({
               >
                 <Dice6 className="w-4 h-4 text-teal-200" />
                 <span>Main Ular Tangga Edukasi SMP (100 Petak Tantangan)</span>
+              </button>
+            )}
+
+            {/* Picture Matching Game Launcher Button */}
+            {onOpenPictureMatch && (
+              <button
+                type="button"
+                onClick={() =>
+                  onOpenPictureMatch(
+                    name.trim()
+                      ? {
+                          name: name.trim(),
+                          className: selectedClass,
+                          attendanceNumber: attendanceNumber || 1,
+                        }
+                      : undefined
+                  )
+                }
+                className="w-full py-2.5 px-3 bg-gradient-to-r from-rose-500 via-purple-500 to-indigo-600 hover:from-rose-600 hover:to-indigo-700 text-white font-extrabold text-[11px] sm:text-xs rounded-xl shadow-xs transition-all flex items-center justify-center gap-2 cursor-pointer active:scale-98"
+                title="Buka Permainan Tebak Gambar & Pencocokan Kosakata Bahasa Inggris"
+              >
+                <span className="text-sm">🖼️</span>
+                <span>Tebak Gambar & Kosakata SMP (Mencocokkan Gambar)</span>
               </button>
             )}
           </div>
